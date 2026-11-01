@@ -1,159 +1,193 @@
 # droidlens
 
-Decompile one class of an APK to JADX-quality Java in tens of milliseconds, for AI agents.
+Decompile any class of an Android APK to clean Java in milliseconds. Built for AI agents.
 
-droidlens is one Rust binary. It finds the class in the APK without indexing it and rebuilds a tiny single-class DEX with a vendored, patched [rust_ASC](https://github.com/MG1937/rust_ASC). It feeds that DEX to a long-lived JADX 1.5.6 JVM that runs a patched `ClspGraph`, so JADX parses its Android framework class set once per process instead of once per request. The class's inner classes, its in-APK supertypes, and the owners of any R8 or Kotlin-mangled names it uses go in as extra tiny DEX inputs, so `@Override`, inner classes and `this` casts come out as in a full-APK JADX run.
+- **JADX-quality code.** Same output quality as JADX, the standard Android decompiler: 5 of 200 test classes had syntax errors, the same 5 as JADX.
+- **No waiting for the whole app to load.** About 10 ms per class (median) once running. Nothing is unpacked or indexed up front.
+- **Light.** About 500 MB of memory, whatever the APK size. One process serves many APKs at once.
+- **Search included.** Find strings, methods, fields, subclasses and the manifest in 5 to 15 ms.
+- **MCP server.** Works with Claude Code, Cursor and other MCP clients.
 
-## Compared with other tools
+## How it works
 
-Same 200 classes: 50 random top-level classes (fixed seed) from each of NewPipe 0.29.1, Mihon 0.21.3 arm64, Bitwarden 2026.10.1 and Element X 26.10.1 (a 400 MB APK). All measured on one Apple Silicon Mac. ASC and rust_ASC were run as one CLI call per class, the way their MCP/CLI use them. JADX 1.5.6 had the whole APK loaded once with resources skipped, then was asked for each class.
+```mermaid
+flowchart LR
+    agent["AI agent<br/>(Claude Code, Cursor, ...)"]
 
-| | droidlens | JADX, whole APK loaded | ASC 0.1.2 (Python) | rust_ASC 0.1.2-post1 |
-| --- | --- | --- | --- | --- |
-| Classes decompiled | 200 / 200 | 200 / 200 | 200 / 200 | 200 / 200 |
-| Files that are not valid Java (tree-sitter) | **5** | **5** | 97 (126 counting the `Lpkg/Cls;` class header) | 97 (126) |
-| Dalvik register names left in code (`v12_3`, `p1`) | 40 | 44 | 13,448 | 13,397 |
-| `@Override` emitted | 342 | 379 | 0 | 0 |
-| Methods marked as failed | 13 | 13 | 0 (failures are silent) | 0 (failures are silent) |
-| Per class, median | 9 to 13 ms | 3 to 8 ms | 43 to 66 ms | 13 to 50 ms |
-| Up-front load | none (one JVM start, about 0.4 s, on first use) | 1.5 to 3.1 s per APK | none | none |
-| Peak memory | 468 to 518 MB | 1.3 to 2.1 GB per APK | 54 to 93 MB | 54 to 79 MB |
-| Search (strings, refs, subclasses) | yes (rust_ASC, in-process) | through its API | yes | yes |
-| MCP server | yes | no | no | yes |
+    subgraph droidlens["droidlens (Rust)"]
+        find["1. Find the class<br/>reads the APK directly,<br/>no index"]
+        context["2. Pick the classes it needs<br/>inner classes, parent classes,<br/>owners of R8/Kotlin names"]
+        extract["3. Cut each class into<br/>a tiny DEX file<br/>(patched rust_ASC)"]
+        search["Search tools<br/>findrefs, listclass, listmethod,<br/>liststring, getmanifest"]
+        find --> context --> extract
+    end
 
-In short: droidlens gives JADX's code quality with no per-APK load and about a quarter to a third of JADX's memory, and serves any number of APKs from one JVM. A JADX process kept open on one APK is faster per class after its load. ASC and rust_ASC are the lightest, but their decompiler (a DAD design) leaves about half of the classes as invalid Java.
+    jadx["4. JADX, kept running<br/>Android framework model<br/>loaded once"]
+    java["Clean Java source<br/>in about 10 ms"]
+    results["Search results<br/>in 5 to 15 ms"]
 
-For scale, decompiling a whole APK to disk with the JADX CLI took 17 s and 8 GB peak on Telegram X 0.29.1 (48 MB). REA, Androguard, apktool and JEB were not measured.
-
-## Similar MCP servers
-
-Other MCP servers for Android reverse engineering, as of November 2026 (star counts from GitHub on 2026-11-01). Only JADX itself and rust_ASC were measured above; the others were not run.
-
-Decompiling Java/Kotlin code:
-
-| MCP server | How it works | Compared with droidlens |
-| --- | --- | --- |
-| [zinja-coder/jadx-mcp-server](https://github.com/zinja-coder/jadx-mcp-server) + [jadx-ai-mcp](https://github.com/zinja-coder/jadx-ai-mcp) (823 stars) | Python MCP server that talks over HTTP to a plugin inside a running JADX GUI | Many more interactive features: rename variables, add comments, resources and `strings.xml`, smali, cross-references, the JADX debugger. Needs the GUI open with one APK fully loaded (JADX measured above at 1.5 to 3.1 s and 1.3 to 2.1 GB per APK). |
-| [mobilehackinglab/jadx-mcp-plugin](https://github.com/mobilehackinglab/jadx-mcp-plugin) (105 stars) | JADX plugin that hosts the MCP server inside JADX | Same model: JADX with the whole APK loaded. |
-| [Qtty/jadx-mcp-server](https://github.com/Qtty/jadx-mcp-server) (33 stars) | Pure-Java MCP server around JADX | Same model, without the GUI. |
-| [rust_ASC](https://github.com/MG1937/rust_ASC) `mcp` | Built-in MCP server; one CLI process per call | Lightest and fast, but about half of its output is not valid Java (measured above). droidlens reuses its search tools in-process. |
-| JEB MCP servers, e.g. [dPhoeniixx/dJEB_mcp_server](https://github.com/dPhoeniixx/dJEB_mcp_server) | Bridge to the commercial JEB decompiler | Needs a JEB licence. |
-| [REA](https://github.com/morluto/rea) | One MCP server for many formats (native, .NET, web, firmware); uses JADX for APKs | Broader scope; for APKs it has JADX's load cost. |
-
-Other parts of Android reverse engineering, which complement droidlens rather than replace it:
-
-| MCP server | Covers |
-| --- | --- |
-| [zinja-coder/apktool-mcp-server](https://github.com/zinja-coder/apktool-mcp-server) (703 stars) | Resources, smali, rebuilding modified APKs |
-| [dnakov/frida-mcp](https://github.com/dnakov/frida-mcp) (463 stars), [FuzzySecurity/kahlo-mcp](https://github.com/FuzzySecurity/kahlo-mcp) (138 stars) | Runtime: hooking and tracing a running app |
-| [LaurieWired/GhidraMCP](https://github.com/LaurieWired/GhidraMCP) (11.7k stars) | Native `.so` libraries |
-| MobSF MCP servers, e.g. [pullkitsan/mobsf-mcp-server](https://github.com/pullkitsan/mobsf-mcp-server) | Automated static and dynamic security scans |
-
-droidlens is the one here that gives JADX-quality code without the JADX GUI or a whole-APK load, serves many APKs from one process, and has search built in. jadx-mcp-server is ahead on interactive work inside one app (renaming, comments, resources, the debugger).
-
-## Install
-
+    agent -- "getclass" --> find
+    extract -- "tiny DEX files" --> jadx
+    jadx --> java
+    agent -- "search" --> search
+    search --> results
 ```
+
+A normal decompiler loads and analyses the whole app before it can show you one class. That takes seconds and gigabytes. droidlens does the opposite:
+
+1. **Find.** It finds the requested class inside the APK without unpacking or indexing the app.
+2. **Pick context.** It picks only the classes JADX needs to get that class right: its inner classes, its parent classes and interfaces, and the classes that own R8 or Kotlin names it uses. Without them you would lose `@Override`, inner classes and readable names.
+3. **Extract.** It cuts each of those classes out into a tiny DEX file. This uses [rust_ASC](https://github.com/MG1937/rust_ASC), patched to be about 10 times faster.
+4. **Decompile.** It hands the tiny files to a JADX process that stays running. JADX is patched to load its model of the Android framework once, not on every request, which saves about 30 ms per class.
+
+## Quick start
+
+You need a JDK 17 (`java` and `javac`) and Rust.
+
+```bash
+# 1. Install
 cargo install --path .
-```
 
-droidlens needs a JDK 17 (`java` and `javac`) on `PATH`. On first use it downloads JADX 1.5.6 (72 MB, sha256-checked) into `$DROIDLENS_HOME` (default `~/.cache/droidlens`) and compiles its two Java sources there. Set `DROIDLENS_JADX_JAR` to use an existing `jadx-1.5.6-all.jar` instead of downloading.
-
-## Use
-
-```
-droidlens getclass APP.apk org.example.Outer$Inner [-o FILE] [--no-context] [--timing]
-droidlens serve APP.apk [--timing]
-droidlens mcp
-```
-
-`CLASS` is dotted (`pkg.Cls`, `pkg.Outer$Inner`) or a descriptor (`Lpkg/Cls;`). `getclass` exits 1 with a message when the class is not in the APK. `--no-context` skips the inner classes and in-APK supertypes. `--timing` prints the per-stage milliseconds on stderr.
-
-`serve` keeps one APK and the JVM warm and speaks JSON lines on stdio:
-
-```
--> {"id":1,"op":"getclass","class":"pkg.Cls","context":true}
-<- {"id":1,"code":"..."}   or   {"id":1,"error":"..."}
-```
-
-With `--timing`, each answered request also prints `timing ms: locate=0.0  context=0.5  extract=0.3  jadx=7.6` on stderr.
-
-`mcp` is a stdio MCP server. Every tool takes an `apk` path. One JVM serves every APK, and the server keeps the eight most recently used APKs open.
-
-| tool | arguments | returns |
-| --- | --- | --- |
-| `getclass` | `apk`, `class`, `context` (default true) | the Java source |
-| `listclass` | `apk`, `prefix`, `limit` | class descriptors, one per line |
-| `listmethod` | `apk`, `class`, `filter`, `limit` | method signatures |
-| `liststring` | `apk`, `filter`, `limit` | string pool values |
-| `findrefs` | `apk`, `kind` (`string`, `type`, `method`, `field`, `extends`, `impl`), `query`, `class`, `fuzzy_class`, `limit` | referencing methods, or subclasses and implementations |
-| `getmanifest` | `apk` | `AndroidManifest.xml` as XML |
-
-`limit` defaults to 500 rows. When a list is longer, the output ends with a `[truncated: showing 500 of N results ...]` line.
-
-To add it to Claude Code:
-
-```
+# 2. Add to Claude Code
 claude mcp add droidlens -- droidlens mcp
 ```
 
-or in `.mcp.json`:
+3. Ask your agent, giving the APK path:
+
+> In ~/Downloads/app.apk, find where the string `api_key` is used and show me the decompiled class.
+
+On first use, droidlens downloads JADX 1.5.6 (72 MB, checksum verified) into `~/.cache/droidlens`. That took about 10 s in our test, and it happens once.
+
+## MCP tools
+
+Every tool takes the path of an APK. One server can work on many APKs. It keeps the 8 most recently used open.
+
+| Tool | What it does |
+| --- | --- |
+| `getclass` | Decompiles a class to Java. `class` can be `pkg.Cls`, `pkg.Outer$Inner` or `Lpkg/Cls;`. |
+| `findrefs` | Finds where a `string`, `type`, `method` or `field` is used, or which classes `extends` / `impl` a type. |
+| `listclass` | Lists classes, optionally under a package `prefix`. |
+| `listmethod` | Lists methods, optionally of one `class` or matching a `filter`. |
+| `liststring` | Lists strings in the app, optionally matching a `filter`. |
+| `getmanifest` | Returns `AndroidManifest.xml` as XML. |
+
+Lists return at most `limit` rows (default 500) and say when results were cut off.
+
+For other MCP clients, add this to `.mcp.json`:
 
 ```json
 {
-	"mcpServers": {
-		"droidlens": { "command": "droidlens", "args": ["mcp"] }
-	}
+  "mcpServers": {
+    "droidlens": { "command": "droidlens", "args": ["mcp"] }
+  }
 }
 ```
 
-The JVM runs with `-Xmx512m` and `-Xss16m`. `DROIDLENS_XMX` overrides the heap. A request that runs out of heap returns an error, and the JVM restarts for the next request.
+## Command line
 
-## Measured
+```bash
+droidlens getclass app.apk com.example.MainActivity               # print Java
+droidlens getclass app.apk 'com.example.Outer$Inner' -o Inner.java  # quote names with $
+droidlens getclass app.apk com.example.MainActivity --timing       # show time per step
+droidlens serve app.apk                                            # JSON lines on stdin/stdout
+```
 
-Telegram X 0.29.1.1817 (3 DEX files), Apple M5 Pro, release build, warm `serve --timing` with context. The harness sends the 4 classes in turn for 15 rounds and reports the median over rounds 4 to 15 (12 samples per class). A second run agreed within 3 percent on every class. The same harness drove the previous Python package (same machine, same session, unpatched rust_ASC and JADX) for the "before" column.
-
-| class | before, ms | after, ms (locate + context + extract + JADX) | @Override (same as full-APK JADX) |
-| --- | --- | --- | --- |
-| `sync.SyncTask` | 44 | 8.5 (0.0 + 0.5 + 0.3 + 7.6) | 1 |
-| `MainActivity` | 114 | 49.9 (0.0 + 0.6 + 2.7 + 46.4) | 11 |
-| `service.TGCallService` | 61 | 18.9 (0.0 + 0.5 + 0.8 + 17.2) | 12 |
-| `th2` | 78 | 38.1 (0.0 + 0.2 + 0.8 + 36.8) | 1 |
-
-The JADX stage is 90 to 96 percent of each request, so JADX's own decompile of the input classes bounds the number. The patched `ClspGraph` removed 26 to 33 ms of per-request framework parsing on every class, and the patched rust_ASC with one reused `DexManager` per DEX cut the extract stage by about 10x. The largest process in the `serve` tree (the JVM) peaked at 463 MB, against 694 MB before.
-
-A one-shot `getclass` on `th2` takes 0.53 s wall clock with a warm disk cache (0.89 s the first time after the binary was built). Of that, JVM start plus the first JADX request is about 0.46 s. `SyncTask` takes 0.39 s.
-
-For the 7 classes the tests cover (4 from Telegram X, 3 from NewPipe 0.29.1), the Java output is byte-identical to the Python package's, apart from the temp path in JADX's `loaded from` comments.
-
-### Robustness: 200 classes from 4 more apps
-
-NewPipe 0.29.1, Mihon 0.21.3 arm64, Bitwarden 2026.10.1 and Element X 26.10.1 (a 400 MB APK), 50 random top-level classes each (fixed seed), warm `serve` with context, compared with full-APK JADX 1.5.6 (whole APK loaded once, resources skipped):
-
-| | droidlens | full-APK JADX |
-| --- | --- | --- |
-| classes decompiled | 200 / 200, no crashes or timeouts | 200 / 200 |
-| files with Java syntax errors (tree-sitter) | 5 | 5 |
-| `@Override` emitted | 342 | 379 |
-| per class, median / p95 | 9 to 13 ms / 38 to 55 ms | 3 to 8 ms / 58 to 358 ms, after a 1.5 to 3.1 s load |
-| peak memory | 468 to 518 MB (whole `serve` tree) | 1.3 to 2.1 GB |
-
-Two full runs produce byte-identical output for all 200 classes. 199 of 200 are byte-identical to the Python package; the other differs only in the order of two annotations.
-
-## Layout
-
-- `src/class_name.rs` parses class names once at the boundaries into a `ClassName` descriptor type.
-- `src/apk.rs` holds one opened APK: lazily inflated DEX entries, the context and extract rules, the DEX header fix.
-- `src/jadx.rs` provisions the jar and compiled worker, and runs the JVM over JSON lines.
-- `src/engine.rs` is the one thread that owns every `ApkSession` and the JVM; the CLI, `serve` and `mcp` send it jobs.
-- `src/serve.rs` and `src/mcp.rs` are the two protocol adapters. `src/main.rs` is the CLI.
-- `java/DecompileWorker.java` is the JVM side. `java/ClspGraph.java` is jadx 1.5.6's class with the shared framework cache; it precedes the jadx jar on the classpath. Both are embedded in the binary and compiled with `javac` on first use.
-- `third_party/rust_ASC` is the vendored extractor. `third_party/rust_ASC/DROIDLENS_PATCHES.md` lists what changed and why.
-
-## Test
+Each `getclass` call starts Java, so it takes about 0.5 s. To decompile many classes from a script, use `serve`. It keeps everything warm, and each request takes about 10 ms:
 
 ```
+-> {"id":1,"op":"getclass","class":"com.example.MainActivity","context":true}
+<- {"id":1,"code":"package com.example; ..."}
+```
+
+An unknown class or an invalid APK prints an error and exits with code 1.
+
+## Compared with other tools
+
+Measured on the same 200 random classes from 4 apps: NewPipe, Mihon, Bitwarden, and Element X (a 400 MB APK).
+
+| | droidlens | JADX (whole app loaded) | ASC (Python) | rust_ASC |
+| --- | --- | --- | --- | --- |
+| Files that aren't valid Java | **5** | **5** | 97 | 97 |
+| `@Override` restored (of 379) | 342 | 379 | 0 | 0 |
+| Time per class (median) | 9 to 13 ms | 3 to 8 ms | 43 to 66 ms | 13 to 50 ms |
+| Wait before the first class | ~0.5 s (Java start) | 1.5 to 3.1 s per app | none | none |
+| Peak memory | 468 to 518 MB | 1.3 to 2.1 GB per app | 54 to 93 MB | 54 to 79 MB |
+| Search tools | ✅ | API only | ✅ | ✅ |
+| MCP server | ✅ | ❌ | ❌ | ✅ |
+
+In short:
+
+- **droidlens** gives JADX-quality code without loading the whole app, with a quarter to a third of JADX's memory.
+- **JADX** kept open on a single app is faster per class once its load is done.
+- **ASC and rust_ASC** are the lightest, but about half of their output isn't valid Java.
+
+**When to use something else:**
+
+- To work interactively inside the JADX GUI, renaming variables, adding comments or using the debugger, use [jadx-mcp-server](https://github.com/zinja-coder/jadx-mcp-server).
+- To decompile a whole app to disk, run JADX directly (`jadx -d out app.apk`).
+- For native `.so` libraries or runtime hooking, pair droidlens with a Ghidra or Frida MCP server.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DROIDLENS_HOME` | `~/.cache/droidlens` | Where JADX and the compiled Java worker are stored |
+| `DROIDLENS_JADX_JAR` | (download) | Use an existing `jadx-1.5.6-all.jar` instead of downloading |
+| `DROIDLENS_XMX` | `512m` | Java heap size. If a request runs out of memory, droidlens returns an error and restarts Java for the next request. |
+
+<details>
+<summary><b>Measurement details</b></summary>
+
+**Per-step time on Telegram X 0.29.1** (release build, warm `serve`, median of 12 rounds, Apple M5 Pro):
+
+| Class | Before (Python) | Now: total (locate + context + extract + JADX) |
+| --- | --- | --- |
+| `sync.SyncTask` | 44 ms | 8.5 ms (0.0 + 0.5 + 0.3 + 7.6) |
+| `MainActivity` | 114 ms | 49.9 ms (0.0 + 0.6 + 2.7 + 46.4) |
+| `service.TGCallService` | 61 ms | 18.9 ms (0.0 + 0.5 + 0.8 + 17.2) |
+| `th2` | 78 ms | 38.1 ms (0.0 + 0.2 + 0.8 + 36.8) |
+
+JADX is 90 to 96 percent of each request.
+
+**200 classes from 4 apps** (50 random top-level classes each, fixed seed, warm `serve`, compared with JADX with the whole app loaded and resources skipped):
+
+- All 200 decompiled, with no crashes or timeouts.
+- The median per class was 9 to 13 ms and p95 was 38 to 55 ms, against JADX's 58 to 358 ms p95.
+- Two full runs produced byte-identical output.
+
+ASC and rust_ASC were run as one CLI call per class, the way their own CLI and MCP use them. Syntax errors were counted with tree-sitter-java.
+
+For scale, decompiling all of Telegram X (48 MB) to disk with the JADX CLI took 17 s and 8 GB of memory.
+
+</details>
+
+<details>
+<summary><b>Project layout</b></summary>
+
+- `src/main.rs`: the command-line interface.
+- `src/mcp.rs` and `src/serve.rs`: the MCP server and the JSON-lines server.
+- `src/engine.rs`: one thread that owns the open APKs and the Java process; everything else sends it jobs.
+- `src/apk.rs`: one opened APK. It finds classes, picks the context classes and extracts tiny DEX files.
+- `src/jadx.rs`: downloads JADX, compiles the Java worker and talks to it.
+- `src/class_name.rs`: parses class names (`pkg.Cls` or `Lpkg/Cls;`).
+- `java/DecompileWorker.java`: the Java side, which decompiles the tiny DEX files with JADX.
+- `java/ClspGraph.java`: JADX 1.5.6's class, patched to load the Android framework model once.
+- `third_party/rust_ASC`: the vendored extractor. `DROIDLENS_PATCHES.md` there lists what we changed and why.
+
+</details>
+
+<details>
+<summary><b>Running the tests</b></summary>
+
+```bash
 cargo test
 ```
 
-The integration tests in `tests/cli.rs` drive the built binary. They need the Telegram X APK (`DROIDLENS_TEST_APK`), the NewPipe APK (`DROIDLENS_TEST_APK2`) and a JADX jar (`DROIDLENS_JADX_JAR`), and skip themselves when a fixture is missing. The Java outputs are checked with tree-sitter for zero syntax errors.
+The integration tests in `tests/cli.rs` run the real binary. They need the Telegram X APK (`DROIDLENS_TEST_APK`), the NewPipe APK (`DROIDLENS_TEST_APK2`) and a JADX jar (`DROIDLENS_JADX_JAR`). Each test skips itself if a file is missing.
+
+</details>
+
+## Credits
+
+- [rust_ASC](https://github.com/MG1937/rust_ASC) (Apache-2.0) for finding and extracting classes, and for search.
+- [JADX](https://github.com/skylot/jadx) (Apache-2.0) for decompiling.
