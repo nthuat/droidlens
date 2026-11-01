@@ -17,7 +17,11 @@ use crate::engine::Engine;
 use crate::error::{Error, Result};
 
 #[derive(Parser)]
-#[command(name = "droidlens", version, about = "Single-class Android decompiler for AI agents")]
+#[command(
+    name = "droidlens",
+    version,
+    about = "Single-class Android decompiler for AI agents"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -54,13 +58,20 @@ enum Cmd {
 
 fn run(cli: Cli, engine: &Engine) -> Result<()> {
     match cli.cmd {
-        Cmd::Getclass { apk, class, output, no_context, timing } => {
+        Cmd::Getclass {
+            apk,
+            class,
+            output,
+            no_context,
+            timing,
+        } => {
             let class = ClassName::parse(&class)?;
             engine.open(&apk)?;
             let d = engine.getclass(&apk, &class, !no_context)?;
             match output {
-                Some(path) => std::fs::write(&path, &d.code)
-                    .map_err(|e| Error::Internal(format!("cannot write {}: {e}", path.display())))?,
+                Some(path) => std::fs::write(&path, &d.code).map_err(|e| {
+                    Error::Internal(format!("cannot write {}: {e}", path.display()))
+                })?,
                 None => std::io::stdout()
                     .write_all(d.code.as_bytes())
                     .map_err(|e| Error::Internal(format!("cannot write stdout: {e}")))?,

@@ -37,11 +37,17 @@ struct Response {
 fn handle(engine: &Engine, apk: &Path, line: &str) -> (Value, Result<(String, Timing)>) {
     let value: Value = match serde_json::from_str(line) {
         Ok(v) => v,
-        Err(e) => return (Value::Null, Err(Error::BadRequest(format!("bad request: {e}")))),
+        Err(e) => {
+            return (
+                Value::Null,
+                Err(Error::BadRequest(format!("bad request: {e}"))),
+            );
+        }
     };
     let id = value.get("id").cloned().unwrap_or(Value::Null);
     let result = (|| {
-        let req: Request = serde_json::from_value(value).map_err(|e| Error::BadRequest(format!("bad request: {e}")))?;
+        let req: Request = serde_json::from_value(value)
+            .map_err(|e| Error::BadRequest(format!("bad request: {e}")))?;
         if req.op != "getclass" {
             return Err(Error::BadRequest(format!("unknown op: {:?}", req.op)));
         }
@@ -66,12 +72,24 @@ pub fn run(engine: &Engine, apk: &Path, timing: bool) -> Result<()> {
                 if timing {
                     eprintln!("{t}");
                 }
-                Response { id, code: Some(code), error: None }
+                Response {
+                    id,
+                    code: Some(code),
+                    error: None,
+                }
             }
-            Err(e) => Response { id, code: None, error: Some(e.to_string()) },
+            Err(e) => Response {
+                id,
+                code: None,
+                error: Some(e.to_string()),
+            },
         };
-        serde_json::to_writer(&mut stdout, &response).map_err(|e| Error::Internal(e.to_string()))?;
-        stdout.write_all(b"\n").and_then(|()| stdout.flush()).map_err(|e| Error::Internal(e.to_string()))?;
+        serde_json::to_writer(&mut stdout, &response)
+            .map_err(|e| Error::Internal(e.to_string()))?;
+        stdout
+            .write_all(b"\n")
+            .and_then(|()| stdout.flush())
+            .map_err(|e| Error::Internal(e.to_string()))?;
     }
     Ok(())
 }

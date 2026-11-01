@@ -38,7 +38,8 @@ fn atomic(dest: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
         return Ok(());
     }
     let parent = dest.parent().expect("dest has a parent");
-    fs::create_dir_all(parent).map_err(|e| Error::Internal(format!("cannot create {}: {e}", parent.display())))?;
+    fs::create_dir_all(parent)
+        .map_err(|e| Error::Internal(format!("cannot create {}: {e}", parent.display())))?;
     let name = dest.file_name().unwrap().to_string_lossy();
     let tmp = parent.join(format!(".{name}.{}.tmp", std::process::id()));
     let result = build(&tmp).and_then(|()| match fs::rename(&tmp, dest) {
@@ -67,7 +68,9 @@ fn fetch_jar(dest: &Path) -> Result<()> {
         let bytes = fs::read(&zip_path).map_err(|e| Error::Internal(e.to_string()))?;
         let digest = format!("{:x}", Sha256::digest(&bytes));
         if digest != JADX_SHA256 {
-            return Err(Error::Internal(format!("JADX download sha256 mismatch: {digest}")));
+            return Err(Error::Internal(format!(
+                "JADX download sha256 mismatch: {digest}"
+            )));
         }
         let mut archive = zip::ZipArchive::new(io::Cursor::new(bytes))
             .map_err(|e| Error::Internal(format!("JADX zip is unreadable: {e}")))?;
@@ -75,7 +78,8 @@ fn fetch_jar(dest: &Path) -> Result<()> {
             .by_name(&format!("lib/jadx-{JADX_VERSION}-all.jar"))
             .map_err(|e| Error::Internal(format!("JADX zip has no jar: {e}")))?;
         let mut out = fs::File::create(dest).map_err(|e| Error::Internal(e.to_string()))?;
-        io::copy(&mut jar, &mut out).map_err(|e| Error::Internal(format!("cannot write jar: {e}")))?;
+        io::copy(&mut jar, &mut out)
+            .map_err(|e| Error::Internal(format!("cannot write jar: {e}")))?;
         Ok(())
     })();
     let _ = fs::remove_file(&zip_path);
@@ -85,21 +89,30 @@ fn fetch_jar(dest: &Path) -> Result<()> {
 fn compile_worker(jar: &Path, dest: &Path) -> Result<()> {
     let src = dest.with_extension("src");
     let _ = fs::remove_dir_all(&src);
-    fs::create_dir_all(&src).map_err(|e| Error::Internal(format!("cannot create {}: {e}", src.display())))?;
-    fs::create_dir_all(dest).map_err(|e| Error::Internal(format!("cannot create {}: {e}", dest.display())))?;
+    fs::create_dir_all(&src)
+        .map_err(|e| Error::Internal(format!("cannot create {}: {e}", src.display())))?;
+    fs::create_dir_all(dest)
+        .map_err(|e| Error::Internal(format!("cannot create {}: {e}", dest.display())))?;
     let worker = src.join("DecompileWorker.java");
     let clsp = src.join("ClspGraph.java");
-    fs::write(&worker, WORKER_SRC).and_then(|()| fs::write(&clsp, CLSP_SRC))
+    fs::write(&worker, WORKER_SRC)
+        .and_then(|()| fs::write(&clsp, CLSP_SRC))
         .map_err(|e| Error::Internal(format!("cannot write worker sources: {e}")))?;
     let out = Command::new("javac")
-        .arg("-cp").arg(jar)
-        .arg("-d").arg(dest)
-        .arg(&worker).arg(&clsp)
+        .arg("-cp")
+        .arg(jar)
+        .arg("-d")
+        .arg(dest)
+        .arg(&worker)
+        .arg(&clsp)
         .output()
         .map_err(|e| Error::Internal(format!("cannot run javac (is a JDK on PATH?): {e}")))?;
     let _ = fs::remove_dir_all(&src);
     if !out.status.success() {
-        return Err(Error::Internal(format!("javac failed:\n{}", String::from_utf8_lossy(&out.stderr))));
+        return Err(Error::Internal(format!(
+            "javac failed:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        )));
     }
     Ok(())
 }
@@ -111,7 +124,10 @@ pub fn provision() -> Result<(PathBuf, PathBuf)> {
         Some(p) => {
             let jar = PathBuf::from(p);
             if !jar.is_file() {
-                return Err(Error::Internal(format!("DROIDLENS_JADX_JAR is not a file: {}", jar.display())));
+                return Err(Error::Internal(format!(
+                    "DROIDLENS_JADX_JAR is not a file: {}",
+                    jar.display()
+                )));
             }
             jar
         }
@@ -149,7 +165,8 @@ impl Jvm {
         let mut child = Command::new("java")
             .arg("-Xss16m")
             .arg(format!("-Xmx{xmx}"))
-            .arg("-cp").arg(cp)
+            .arg("-cp")
+            .arg(cp)
             .arg("DecompileWorker")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -157,7 +174,11 @@ impl Jvm {
             .map_err(|e| Error::Internal(format!("cannot start java (is a JDK on PATH?): {e}")))?;
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        Ok(Jvm { child, stdin, stdout })
+        Ok(Jvm {
+            child,
+            stdin,
+            stdout,
+        })
     }
 
     fn roundtrip(&mut self, request: &str) -> io::Result<String> {
@@ -166,7 +187,10 @@ impl Jvm {
         self.stdin.flush()?;
         let mut line = String::new();
         if self.stdout.read_line(&mut line)? == 0 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "JADX worker exited"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "JADX worker exited",
+            ));
         }
         Ok(line)
     }
@@ -206,7 +230,10 @@ pub struct JadxWorker {
 }
 
 impl JadxWorker {
-    fn roundtrip(&mut self, request: &str) -> Result<std::result::Result<WorkerResponse, io::Error>> {
+    fn roundtrip(
+        &mut self,
+        request: &str,
+    ) -> Result<std::result::Result<WorkerResponse, io::Error>> {
         if self.jvm.is_none() {
             self.jvm = Some(Jvm::start()?);
         }
@@ -227,7 +254,8 @@ impl JadxWorker {
         let mut paths = Vec::with_capacity(inputs.len());
         for (n, input) in inputs.iter().enumerate() {
             let p = tmp.path().join(format!("{n:03}.dex"));
-            fs::write(&p, &input.bytes).map_err(|e| Error::Internal(format!("cannot write {}: {e}", p.display())))?;
+            fs::write(&p, &input.bytes)
+                .map_err(|e| Error::Internal(format!("cannot write {}: {e}", p.display())))?;
             paths.push(p);
         }
         self.next_id += 1;
@@ -251,7 +279,11 @@ impl JadxWorker {
                 }
             }
         };
-        if response.error.as_deref().is_some_and(|e| e.contains("OutOfMemoryError")) {
+        if response
+            .error
+            .as_deref()
+            .is_some_and(|e| e.contains("OutOfMemoryError"))
+        {
             self.close();
         }
         match (response.code, response.error) {

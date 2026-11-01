@@ -17,7 +17,8 @@ impl ClassName {
             format!("L{};", s.replace('.', "/"))
         };
         let body = &desc[1..desc.len() - 1];
-        let segment_ok = |seg: &str| !seg.is_empty() && !seg.chars().any(|c| c == ';' || c.is_whitespace());
+        let segment_ok =
+            |seg: &str| !seg.is_empty() && !seg.chars().any(|c| c == ';' || c.is_whitespace());
         if body.is_empty() || !body.split('/').all(segment_ok) {
             return Err(Error::BadClassName(s.to_string()));
         }

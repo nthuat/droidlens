@@ -51,8 +51,16 @@ pub struct Decompiled {
 }
 
 enum Job {
-    Open { apk: PathBuf, reply: Sender<Result<()>> },
-    GetClass { apk: PathBuf, class: ClassName, context: bool, reply: Sender<Result<Decompiled>> },
+    Open {
+        apk: PathBuf,
+        reply: Sender<Result<()>>,
+    },
+    GetClass {
+        apk: PathBuf,
+        class: ClassName,
+        context: bool,
+        reply: Sender<Result<Decompiled>>,
+    },
 }
 
 /// Handle to the worker thread. Clones share the one thread, so every APK and every request
@@ -74,12 +82,23 @@ impl Engine {
     /// Opens (or finds) the session for `apk`, so a bad path fails here instead of on first use.
     pub fn open(&self, apk: &Path) -> Result<()> {
         let (reply, rx) = channel();
-        self.send(Job::Open { apk: apk.to_path_buf(), reply }, rx)
+        self.send(
+            Job::Open {
+                apk: apk.to_path_buf(),
+                reply,
+            },
+            rx,
+        )
     }
 
     pub fn getclass(&self, apk: &Path, class: &ClassName, context: bool) -> Result<Decompiled> {
         let (reply, rx) = channel();
-        let job = Job::GetClass { apk: apk.to_path_buf(), class: class.clone(), context, reply };
+        let job = Job::GetClass {
+            apk: apk.to_path_buf(),
+            class: class.clone(),
+            context,
+            reply,
+        };
         self.send(job, rx)
     }
 
@@ -104,7 +123,12 @@ impl Worker {
                 Job::Open { apk, reply } => {
                     let _ = reply.send(self.session(&apk).map(|_| ()));
                 }
-                Job::GetClass { apk, class, context, reply } => {
+                Job::GetClass {
+                    apk,
+                    class,
+                    context,
+                    reply,
+                } => {
                     let _ = reply.send(self.getclass(&apk, &class, context));
                 }
             }
@@ -133,7 +157,11 @@ impl Worker {
             return Err(Error::ClassNotFound(class.dotted()));
         }
         timing.locate = watch.lap();
-        let classes = if context { session.context(class)? } else { vec![class.clone()] };
+        let classes = if context {
+            session.context(class)?
+        } else {
+            vec![class.clone()]
+        };
         timing.context = watch.lap();
         let inputs = if context {
             session.extract_with_owners(class, &classes)?
@@ -153,7 +181,15 @@ mod tests {
 
     #[test]
     fn timing_line_has_the_format_the_benchmark_harness_parses() {
-        let t = Timing { locate: 0.04, context: 1.26, extract: 3.0, jadx: 33.333 };
-        assert_eq!(t.to_string(), "timing ms: locate=0.0  context=1.3  extract=3.0  jadx=33.3");
+        let t = Timing {
+            locate: 0.04,
+            context: 1.26,
+            extract: 3.0,
+            jadx: 33.333,
+        };
+        assert_eq!(
+            t.to_string(),
+            "timing ms: locate=0.0  context=1.3  extract=3.0  jadx=33.3"
+        );
     }
 }

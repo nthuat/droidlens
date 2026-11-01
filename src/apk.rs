@@ -38,7 +38,9 @@ pub struct ApkSession {
 
 impl ApkSession {
     pub fn open(path: &Path) -> Result<ApkSession> {
-        let open_err = |e: &dyn std::fmt::Display| Error::Apk(format!("cannot open APK {}: {e}", path.display()));
+        let open_err = |e: &dyn std::fmt::Display| {
+            Error::Apk(format!("cannot open APK {}: {e}", path.display()))
+        };
         let file = File::open(path).map_err(|e| open_err(&e))?;
         let zip = zip::ZipArchive::new(file).map_err(|e| open_err(&e))?;
         let mut names: Vec<(u32, String)> = zip
@@ -51,9 +53,17 @@ impl ApkSession {
         }
         let entries = names
             .into_iter()
-            .map(|(_, name)| DexEntry { name, manager: None, descriptors: None })
+            .map(|(_, name)| DexEntry {
+                name,
+                manager: None,
+                descriptors: None,
+            })
             .collect();
-        Ok(ApkSession { zip, entries, missing: HashSet::new() })
+        Ok(ApkSession {
+            zip,
+            entries,
+            missing: HashSet::new(),
+        })
     }
 
     fn manager(&mut self, i: usize) -> Result<&mut DexManager> {
@@ -70,7 +80,11 @@ impl ApkSession {
     }
 
     fn dex(&mut self, i: usize) -> Result<&DEX> {
-        Ok(self.manager(i)?.dex.as_ref().expect("DexManager::from_bytes always parses"))
+        Ok(self
+            .manager(i)?
+            .dex
+            .as_ref()
+            .expect("DexManager::from_bytes always parses"))
     }
 
     /// Index of the DEX entry that defines `class`, inflating entries until one does.
@@ -100,7 +114,9 @@ impl ApkSession {
 
     /// Direct supertypes of `class` (superclass, then interfaces) that this APK defines.
     fn in_apk_supertypes(&mut self, class: &ClassName) -> Result<Vec<ClassName>> {
-        let Some(i) = self.find(class)? else { return Ok(Vec::new()) };
+        let Some(i) = self.find(class)? else {
+            return Ok(Vec::new());
+        };
         let dex = self.dex(i)?;
         let mut def = dex.get_class(class.descriptor()).expect("find succeeded");
         let mut type_ids = vec![def.superclass_idx()];
@@ -122,9 +138,16 @@ impl ApkSession {
     /// The classes JADX needs to print `target` as a full-APK run would: the target, its inner
     /// classes (same DEX), then its in-APK superclasses and interfaces, transitively.
     pub fn context(&mut self, target: &ClassName) -> Result<Vec<ClassName>> {
-        let i = self.find(target)?.ok_or_else(|| Error::ClassNotFound(target.dotted()))?;
+        let i = self
+            .find(target)?
+            .ok_or_else(|| Error::ClassNotFound(target.dotted()))?;
         let mut out = vec![target.clone()];
-        out.extend(self.descriptors(i)?.iter().filter(|d| d.is_inner_of(target)).cloned());
+        out.extend(
+            self.descriptors(i)?
+                .iter()
+                .filter(|d| d.is_inner_of(target))
+                .cloned(),
+        );
         let mut seen: HashSet<ClassName> = out.iter().cloned().collect();
         let mut queue = vec![target.clone()];
         while let Some(class) = queue.pop() {
@@ -139,22 +162,34 @@ impl ApkSession {
     }
 
     pub fn extract(&mut self, class: &ClassName) -> Result<MiniDex> {
-        let i = self.find(class)?.ok_or_else(|| Error::ClassNotFound(class.dotted()))?;
+        let i = self
+            .find(class)?
+            .ok_or_else(|| Error::ClassNotFound(class.dotted()))?;
         let bytes = fix_header(self.manager(i)?.extract_and_rebuild(class.descriptor()));
-        Ok(MiniDex { class: class.clone(), bytes })
+        Ok(MiniDex {
+            class: class.clone(),
+            bytes,
+        })
     }
 
     /// Mini DEX per class of `classes` (from `context`), plus the in-APK owners of every symbol
     /// that the printed classes (target and its inner classes) name with something that is not
     /// a Java identifier. JADX renames R8 `-CC`, `$r8$lambda$...`, Kotlin `foo-0680j_4` and
     /// `X$1` only for classes it was given, so those owners must be inputs too.
-    pub fn extract_with_owners(&mut self, target: &ClassName, classes: &[ClassName]) -> Result<Vec<MiniDex>> {
+    pub fn extract_with_owners(
+        &mut self,
+        target: &ClassName,
+        classes: &[ClassName],
+    ) -> Result<Vec<MiniDex>> {
         let mut blobs = Vec::with_capacity(classes.len());
         for class in classes {
             blobs.push(self.extract(class)?);
         }
         let mut owners = BTreeSet::new();
-        for blob in blobs.iter().filter(|b| b.class == *target || b.class.is_inner_of(target)) {
+        for blob in blobs
+            .iter()
+            .filter(|b| b.class == *target || b.class.is_inner_of(target))
+        {
             owners.extend(invalid_name_owners(&blob.bytes));
         }
         let have: HashSet<&ClassName> = classes.iter().collect();
@@ -223,7 +258,9 @@ fn invalid_name_owners(mini_dex: &[u8]) -> BTreeSet<ClassName> {
         if !d.starts_with('L') {
             continue;
         }
-        let segments = d[1..d.len() - 1].split(['/', '$']).filter(|s| !s.is_empty());
+        let segments = d[1..d.len() - 1]
+            .split(['/', '$'])
+            .filter(|s| !s.is_empty());
         if !segments.clone().all(is_java_name) {
             owners.insert(ClassName::from_dex(d.to_string()));
         }

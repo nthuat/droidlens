@@ -5,7 +5,8 @@ use std::path::Path;
 
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
-    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool, ToolAnnotations,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
+    ToolAnnotations,
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
@@ -130,7 +131,11 @@ fn tool<I: JsonSchema + 'static>(name: &'static str, description: &'static str) 
     Tool::new(name, description, serde_json::Map::new())
         .with_input_schema::<I>()
         .with_annotations(
-            ToolAnnotations::new().read_only(true).destructive(false).idempotent(true).open_world(false),
+            ToolAnnotations::new()
+                .read_only(true)
+                .destructive(false)
+                .idempotent(true)
+                .open_world(false),
         )
 }
 
@@ -147,7 +152,10 @@ fn tools() -> Vec<Tool> {
             "findrefs",
             "Find methods that reference a string, type, method or field, or classes that extend or implement a class.",
         ),
-        tool::<GetManifestArgs>("getmanifest", "Decode AndroidManifest.xml of an APK to XML."),
+        tool::<GetManifestArgs>(
+            "getmanifest",
+            "Decode AndroidManifest.xml of an APK to XML.",
+        ),
     ]
 }
 
@@ -163,7 +171,12 @@ fn render(rows: Vec<String>, limit: Option<usize>) -> String {
     if total == 0 {
         return "(no results)".into();
     }
-    let mut out = rows.iter().take(limit).cloned().collect::<Vec<_>>().join("\n");
+    let mut out = rows
+        .iter()
+        .take(limit)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
     if total > limit {
         out.push_str(&format!(
             "\n[truncated: showing {limit} of {total} results; raise `limit` or narrow the query]"
@@ -173,7 +186,14 @@ fn render(rows: Vec<String>, limit: Option<usize>) -> String {
 }
 
 fn find_input(args: &FindRefsArgs) -> Result<FindRefInput> {
-    let mut input = FindRefInput { string: None, type_: None, method: None, field: None, extends: None, impl_: None };
+    let mut input = FindRefInput {
+        string: None,
+        type_: None,
+        method: None,
+        field: None,
+        extends: None,
+        impl_: None,
+    };
     let query = args.query.trim();
     match args.kind {
         RefKind::String => input.string = Some(query.to_string()),
@@ -182,14 +202,22 @@ fn find_input(args: &FindRefsArgs) -> Result<FindRefInput> {
         RefKind::Impl => input.impl_ = Some(ClassName::parse(query)?.descriptor().to_string()),
         RefKind::Method | RefKind::Field => {
             let fuzzy = args.fuzzy_class.unwrap_or(false);
-            let class = match args.class.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+            let class = match args
+                .class
+                .as_deref()
+                .map(str::trim)
+                .filter(|c| !c.is_empty())
+            {
                 None => None,
                 Some(c) if fuzzy => Some((c.replace('.', "/"), false)),
                 Some(c) => Some((ClassName::parse(c)?.descriptor().to_string(), true)),
             };
             let name = (!query.is_empty()).then(|| query.to_string());
             if class.is_none() && name.is_none() {
-                return Err(Error::BadRequest(format!("{} query needs a name or a class", args.kind.name())));
+                return Err(Error::BadRequest(format!(
+                    "{} query needs a name or a class",
+                    args.kind.name()
+                )));
             }
             if args.kind == RefKind::Method {
                 input.method = Some(MethodFind::new(class, name));
@@ -207,24 +235,33 @@ fn call(engine: &Engine, name: &str, args: Value) -> Result<String> {
         "getclass" => {
             let a: GetClassArgs = serde_json::from_value(args).map_err(bad)?;
             let class = ClassName::parse(&a.class)?;
-            Ok(engine.getclass(Path::new(&a.apk), &class, a.context.unwrap_or(true))?.code)
+            Ok(engine
+                .getclass(Path::new(&a.apk), &class, a.context.unwrap_or(true))?
+                .code)
         }
         "listclass" => {
             let a: ListClassArgs = serde_json::from_value(args).map_err(bad)?;
-            let rows = handler(&a.apk).list_classes(a.prefix.as_deref()).map_err(Error::Apk)?;
+            let rows = handler(&a.apk)
+                .list_classes(a.prefix.as_deref())
+                .map_err(Error::Apk)?;
             Ok(render(rows, a.limit))
         }
         "listmethod" => {
             let a: ListMethodArgs = serde_json::from_value(args).map_err(bad)?;
             let class = a.class.as_deref().map(ClassName::parse).transpose()?;
             let rows = handler(&a.apk)
-                .list_methods(class.as_ref().map(ClassName::descriptor), a.filter.as_deref())
+                .list_methods(
+                    class.as_ref().map(ClassName::descriptor),
+                    a.filter.as_deref(),
+                )
                 .map_err(Error::Apk)?;
             Ok(render(rows, a.limit))
         }
         "liststring" => {
             let a: ListStringArgs = serde_json::from_value(args).map_err(bad)?;
-            let rows = handler(&a.apk).list_strings(a.filter.as_deref()).map_err(Error::Apk)?;
+            let rows = handler(&a.apk)
+                .list_strings(a.filter.as_deref())
+                .map_err(Error::Apk)?;
             Ok(render(rows, a.limit))
         }
         "findrefs" => {
@@ -268,7 +305,10 @@ impl ServerHandler for Server {
         _context: RequestContext<RoleServer>,
     ) -> std::result::Result<ListToolsResult, ErrorData> {
         if request.is_some_and(|r| r.cursor.is_some()) {
-            return Err(ErrorData::invalid_params("tool list has no continuation cursor", None));
+            return Err(ErrorData::invalid_params(
+                "tool list has no continuation cursor",
+                None,
+            ));
         }
         Ok(ListToolsResult::with_all_items(self.tools.clone()))
     }
@@ -283,7 +323,10 @@ impl ServerHandler for Server {
         _context: RequestContext<RoleServer>,
     ) -> std::result::Result<CallToolResponse, ErrorData> {
         if self.get_tool(&request.name).is_none() {
-            return Err(ErrorData::invalid_params(format!("unknown tool: {}", request.name), None));
+            return Err(ErrorData::invalid_params(
+                format!("unknown tool: {}", request.name),
+                None,
+            ));
         }
         let engine = self.engine.clone();
         let name = request.name.to_string();
@@ -292,7 +335,9 @@ impl ServerHandler for Server {
         let result = match result {
             Ok(Ok(text)) => CallToolResult::success(vec![ContentBlock::text(text)]),
             Ok(Err(e)) => CallToolResult::error(vec![ContentBlock::text(e.to_string())]),
-            Err(e) => CallToolResult::error(vec![ContentBlock::text(format!("tool task failed: {e}"))]),
+            Err(e) => {
+                CallToolResult::error(vec![ContentBlock::text(format!("tool task failed: {e}"))])
+            }
         };
         Ok(result.into())
     }
@@ -304,12 +349,18 @@ pub fn run(engine: Engine) -> Result<()> {
         .build()
         .map_err(|e| Error::Internal(e.to_string()))?;
     runtime.block_on(async {
-        let server = Server { engine, tools: tools() };
+        let server = Server {
+            engine,
+            tools: tools(),
+        };
         let service = server
             .serve((tokio::io::stdin(), tokio::io::stdout()))
             .await
             .map_err(|e| Error::Internal(e.to_string()))?;
-        service.waiting().await.map_err(|e| Error::Internal(e.to_string()))?;
+        service
+            .waiting()
+            .await
+            .map_err(|e| Error::Internal(e.to_string()))?;
         Ok(())
     })
 }
@@ -323,7 +374,10 @@ mod tests {
         let rows = |n: usize| (0..n).map(|i| i.to_string()).collect::<Vec<_>>();
         assert_eq!(render(rows(3), Some(3)), "0\n1\n2");
         let out = render(rows(4), Some(3));
-        assert!(out.starts_with("0\n1\n2\n[truncated: showing 3 of 4"), "{out}");
+        assert!(
+            out.starts_with("0\n1\n2\n[truncated: showing 3 of 4"),
+            "{out}"
+        );
         assert_eq!(render(Vec::new(), None), "(no results)");
     }
 }
