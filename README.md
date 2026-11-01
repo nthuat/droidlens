@@ -10,14 +10,17 @@
 
 Ask your AI agent *"how does login work in this app?"* and it searches the APK, decompiles just the classes it needs, and reads them. Each class arrives in about **10 ms**, with **no wait for the app to load** and about **500 MB of memory**, even for a 400 MB APK.
 
-| | droidlens | JADX, whole app loaded |
-| --- | --- | --- |
-| Wait before the first class | **~0.5 s**, once | 1.5 to 3.1 s per app |
-| Time per class (median) | 9 to 13 ms | 3 to 8 ms |
-| Memory | **~500 MB**, for any number of apps | 1.3 to 2.1 GB per app |
-| Files that aren't valid Java (of 200) | 5 | 5 |
+**Claude Code answering questions about real apps**, with droidlens or with the JADX command line (12 questions on 4 apps, 11 to 420 MB):
 
-<sub>Measured on 200 random classes from NewPipe, Mihon, Bitwarden and Element X. Details below.</sub>
+| | droidlens | JADX command line |
+| --- | --- | --- |
+| Correct answers | 12 / 12 | 12 / 12 |
+| Time per question (median) | **21 s** | 37 s |
+| Tool memory (median) | **0.4 GB** | 6.6 GB |
+| Files written | **none** | 67 to 165 MB per app |
+| Token cost (total) | $1.37 | **$1.24** |
+
+**Decompiler output on 200 random classes:** 5 files that are not valid Java, the same 5 as JADX. Full numbers and method in [Compared with other tools](#compared-with-other-tools).
 
 ## Built for
 
