@@ -25,6 +25,32 @@ In short: droidlens gives JADX's code quality with no per-APK load and about a q
 
 For scale, decompiling a whole APK to disk with the JADX CLI took 17 s and 8 GB peak on Telegram X 0.29.1 (48 MB). REA, Androguard, apktool and JEB were not measured.
 
+## Similar MCP servers
+
+Other MCP servers for Android reverse engineering, as of November 2026 (star counts from GitHub on 2026-11-01). Only JADX itself and rust_ASC were measured above; the others were not run.
+
+Decompiling Java/Kotlin code:
+
+| MCP server | How it works | Compared with droidlens |
+| --- | --- | --- |
+| [zinja-coder/jadx-mcp-server](https://github.com/zinja-coder/jadx-mcp-server) + [jadx-ai-mcp](https://github.com/zinja-coder/jadx-ai-mcp) (823 stars) | Python MCP server that talks over HTTP to a plugin inside a running JADX GUI | Many more interactive features: rename variables, add comments, resources and `strings.xml`, smali, cross-references, the JADX debugger. Needs the GUI open with one APK fully loaded (JADX measured above at 1.5 to 3.1 s and 1.3 to 2.1 GB per APK). |
+| [mobilehackinglab/jadx-mcp-plugin](https://github.com/mobilehackinglab/jadx-mcp-plugin) (105 stars) | JADX plugin that hosts the MCP server inside JADX | Same model: JADX with the whole APK loaded. |
+| [Qtty/jadx-mcp-server](https://github.com/Qtty/jadx-mcp-server) (33 stars) | Pure-Java MCP server around JADX | Same model, without the GUI. |
+| [rust_ASC](https://github.com/MG1937/rust_ASC) `mcp` | Built-in MCP server; one CLI process per call | Lightest and fast, but about half of its output is not valid Java (measured above). droidlens reuses its search tools in-process. |
+| JEB MCP servers, e.g. [dPhoeniixx/dJEB_mcp_server](https://github.com/dPhoeniixx/dJEB_mcp_server) | Bridge to the commercial JEB decompiler | Needs a JEB licence. |
+| [REA](https://github.com/morluto/rea) | One MCP server for many formats (native, .NET, web, firmware); uses JADX for APKs | Broader scope; for APKs it has JADX's load cost. |
+
+Other parts of Android reverse engineering, which complement droidlens rather than replace it:
+
+| MCP server | Covers |
+| --- | --- |
+| [zinja-coder/apktool-mcp-server](https://github.com/zinja-coder/apktool-mcp-server) (703 stars) | Resources, smali, rebuilding modified APKs |
+| [dnakov/frida-mcp](https://github.com/dnakov/frida-mcp) (463 stars), [FuzzySecurity/kahlo-mcp](https://github.com/FuzzySecurity/kahlo-mcp) (138 stars) | Runtime: hooking and tracing a running app |
+| [LaurieWired/GhidraMCP](https://github.com/LaurieWired/GhidraMCP) (11.7k stars) | Native `.so` libraries |
+| MobSF MCP servers, e.g. [pullkitsan/mobsf-mcp-server](https://github.com/pullkitsan/mobsf-mcp-server) | Automated static and dynamic security scans |
+
+droidlens is the one here that gives JADX-quality code without the JADX GUI or a whole-APK load, serves many APKs from one process, and has search built in. jadx-mcp-server is ahead on interactive work inside one app (renaming, comments, resources, the debugger).
+
 ## Install
 
 ```
