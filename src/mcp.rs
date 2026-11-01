@@ -19,6 +19,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::bundle;
 use crate::class_name::ClassName;
 use crate::engine::Engine;
 use crate::error::{Error, Result};
@@ -33,7 +34,7 @@ const CODE_MAX_LINES_PER_CLASS: usize = 40;
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct GetClassArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
     /// Dotted class name (`pkg.Outer$Inner`) or Dalvik descriptor (`Lpkg/Outer$Inner;`).
     class: String,
@@ -45,7 +46,7 @@ struct GetClassArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ListClassArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
     /// Case sensitive class or package prefix, dotted or descriptor form.
     prefix: Option<String>,
@@ -56,7 +57,7 @@ struct ListClassArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ListMethodArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
     /// Only methods defined by this class, dotted or descriptor form.
     class: Option<String>,
@@ -69,7 +70,7 @@ struct ListMethodArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ListStringArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
     /// Case insensitive substring filter over string values.
     filter: Option<String>,
@@ -110,7 +111,7 @@ impl RefKind {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct FindRefsArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
     /// What to search for.
     kind: RefKind,
@@ -131,7 +132,7 @@ struct FindRefsArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct GetManifestArgs {
-    /// Path to the APK.
+    /// Path to the APK, or to an XAPK / APKS / APKM bundle or a folder of split APKs.
     apk: String,
 }
 
@@ -298,7 +299,16 @@ fn code_blocks(engine: &Engine, apk: &Path, rows: &[String], needle: &str) -> St
     out
 }
 
-fn call(engine: &Engine, name: &str, args: Value) -> Result<String> {
+fn call(engine: &Engine, name: &str, mut args: Value) -> Result<String> {
+    if let Some(apk) = args.get_mut("apk")
+        && let Some(path) = apk.as_str()
+    {
+        *apk = Value::String(
+            bundle::resolve(Path::new(path))?
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
     let bad = |e: serde_json::Error| Error::BadRequest(format!("invalid arguments: {e}"));
     match name {
         "getclass" => {

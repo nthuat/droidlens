@@ -87,7 +87,7 @@ On first use, droidlens downloads JADX 1.5.6 (72 MB, checksum verified) into `~/
 
 ## MCP tools
 
-Every tool takes the path of an APK. One server can work on many APKs. It keeps the 8 most recently used open.
+Every tool takes the path of an APK. Split-APK bundles work too: an XAPK, APKS or APKM file, or a folder of split APKs. droidlens merges the code of all splits into one cached APK under `~/.cache/droidlens/bundles` the first time (about 0.4 s for a 34 MB XAPK). One server can work on many APKs. It keeps the 8 most recently used open.
 
 | Tool | What it does |
 | --- | --- |

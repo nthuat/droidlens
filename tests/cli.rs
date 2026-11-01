@@ -446,3 +446,33 @@ fn mcp_serves_two_apks_through_one_jvm() {
     );
     p.finish();
 }
+
+/// An XAPK (base APK plus a code-free config split, as APKPure ships them) decompiles like the APK.
+#[test]
+fn xapk_bundle_decompiles_like_its_base_apk() {
+    if !have(&[newpipe(), jar()]) {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let xapk = dir.path().join("newpipe.xapk");
+    let mut w = zip::ZipWriter::new(std::fs::File::create(&xapk).unwrap());
+    let opts = zip::write::SimpleFileOptions::default();
+    let mut config = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    config.start_file("AndroidManifest.xml", opts).unwrap();
+    let config = config.finish().unwrap().into_inner();
+    for (name, bytes) in [
+        ("manifest.json", b"{}".to_vec()),
+        ("org.schabi.newpipe.apk", std::fs::read(newpipe()).unwrap()),
+        ("config.en.apk", config),
+    ] {
+        w.start_file(name, opts).unwrap();
+        w.write_all(&bytes).unwrap();
+    }
+    w.finish().unwrap();
+
+    let class = "org.schabi.newpipe.extractor.Image";
+    let from_xapk = run(&["getclass", xapk.to_str().unwrap(), class]);
+    assert!(from_xapk.status.success(), "{}", stderr(&from_xapk));
+    let from_apk = run(&["getclass", newpipe().to_str().unwrap(), class]);
+    assert_eq!(stdout(&from_xapk), stdout(&from_apk));
+}

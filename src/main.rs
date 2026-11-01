@@ -1,4 +1,5 @@
 mod apk;
+mod bundle;
 mod class_name;
 mod engine;
 mod error;
@@ -67,6 +68,7 @@ fn run(cli: Cli, engine: &Engine) -> Result<()> {
             timing,
         } => {
             let class = ClassName::parse(&class)?;
+            let apk = bundle::resolve(&apk)?;
             engine.open(&apk)?;
             let d = engine.getclass(&apk, &class, !no_context)?;
             match output {
@@ -83,6 +85,7 @@ fn run(cli: Cli, engine: &Engine) -> Result<()> {
             Ok(())
         }
         Cmd::Serve { apk, timing } => {
+            let apk = bundle::resolve(&apk)?;
             engine.open(&apk)?;
             serve::run(engine, &apk, timing)
         }

@@ -21,7 +21,7 @@ const JADX_SHA256: &str = "545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3d
 const WORKER_SRC: &str = include_str!("../java/DecompileWorker.java");
 const CLSP_SRC: &str = include_str!("../java/ClspGraph.java");
 
-fn home() -> Result<PathBuf> {
+pub(crate) fn home() -> Result<PathBuf> {
     if let Some(h) = std::env::var_os("DROIDLENS_HOME") {
         return Ok(PathBuf::from(h));
     }
@@ -33,7 +33,7 @@ fn home() -> Result<PathBuf> {
 /// Runs `build(tmp)` then renames `tmp` onto `dest`; a second run with `dest` present does nothing.
 /// Processes racing on a cold cache each build their own `tmp`; a loser whose directory rename
 /// fails because the winner's `dest` now exists uses the winner's identical copy.
-fn atomic(dest: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+pub(crate) fn atomic(dest: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     if dest.exists() {
         return Ok(());
     }
