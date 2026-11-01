@@ -10,28 +10,9 @@ Decompile any class of an Android APK to clean Java in milliseconds. Built for A
 
 ## How it works
 
-```mermaid
-flowchart LR
-    agent["AI agent<br/>(Claude Code, Cursor, ...)"]
+![How droidlens works: the agent's getclass request goes through find, pick context and cut tiny DEX, then JADX returns Java source; search requests go to the search tools](docs/how-it-works.png)
 
-    subgraph droidlens["droidlens (Rust)"]
-        find["1. Find the class<br/>reads the APK directly,<br/>no index"]
-        context["2. Pick the classes it needs<br/>inner classes, parent classes,<br/>owners of R8/Kotlin names"]
-        extract["3. Cut each class into<br/>a tiny DEX file<br/>(patched rust_ASC)"]
-        search["Search tools<br/>findrefs, listclass, listmethod,<br/>liststring, getmanifest"]
-        find --> context --> extract
-    end
-
-    jadx["4. JADX, kept running<br/>Android framework model<br/>loaded once"]
-    java["Clean Java source<br/>in about 10 ms"]
-    results["Search results<br/>in 5 to 15 ms"]
-
-    agent -- "getclass" --> find
-    extract -- "tiny DEX files" --> jadx
-    jadx --> java
-    agent -- "search" --> search
-    search --> results
-```
+The diagram's source is [`docs/how-it-works.mmd`](docs/how-it-works.mmd).
 
 A normal decompiler loads and analyses the whole app before it can show you one class. That takes seconds and gigabytes. droidlens does the opposite:
 
@@ -191,3 +172,7 @@ The integration tests in `tests/cli.rs` run the real binary. They need the Teleg
 
 - [rust_ASC](https://github.com/MG1937/rust_ASC) (Apache-2.0) for finding and extracting classes, and for search.
 - [JADX](https://github.com/skylot/jadx) (Apache-2.0) for decompiling.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). droidlens includes a patched copy of rust_ASC and one patched JADX source file, both also Apache-2.0.

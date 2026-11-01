@@ -1,0 +1,18 @@
+flowchart LR
+    agent["AI agent"]
+
+    subgraph droidlens["droidlens (Rust)"]
+        find["1. Find class<br/>no index"]
+        context["2. Pick context<br/>inner + parent classes"]
+        extract["3. Cut tiny DEX<br/>patched rust_ASC"]
+        search["Search tools<br/>findrefs, listclass, ..."]
+        find --> context --> extract
+    end
+
+    jadx["4. JADX<br/>always running"]
+    java["Java source<br/>~10 ms"]
+    results["Results<br/>5-15 ms"]
+
+    agent -- "getclass" --> find
+    extract --> jadx --> java
+    agent -- "search" --> search --> results

@@ -1,3 +1,11 @@
+/*
+ * Modified copy of jadx.core.clsp.ClspGraph from JADX 1.5.6 (https://github.com/skylot/jadx).
+ * Copyright 2014-2026 skylot and JADX contributors. Licensed under the Apache License 2.0.
+ *
+ * Changed by droidlens: the parsed Android framework class set and its super-type caches
+ * are kept in static fields and shared by every JadxDecompiler in the JVM, so they are
+ * parsed once per process instead of once per load().
+ */
 package jadx.core.clsp;
 
 import java.io.IOException;

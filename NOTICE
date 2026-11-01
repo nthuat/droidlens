@@ -1,0 +1,10 @@
+droidlens
+Copyright 2026 Thuat Nguyen
+
+This product includes software from these projects, each under the Apache License 2.0:
+
+- rust_ASC (https://github.com/MG1937/rust_ASC), vendored in third_party/rust_ASC
+  with the changes listed in third_party/rust_ASC/DROIDLENS_PATCHES.md.
+- JADX (https://github.com/skylot/jadx). java/ClspGraph.java is a modified copy
+  of jadx-core's jadx.core.clsp.ClspGraph from JADX 1.5.6.
+  Copyright 2014-2026 skylot and JADX contributors.

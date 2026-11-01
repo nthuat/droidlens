@@ -2,6 +2,7 @@
 name = "droidlens"
 version = "0.2.0"
 edition = "2024"
+license = "Apache-2.0"
 description = "Single-class Android decompiler for AI agents: rust_ASC extraction plus a warm JADX JVM"
 publish = false
 
