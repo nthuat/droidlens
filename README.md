@@ -55,9 +55,7 @@ It can also search the app first: where a string is used, which classes extend a
 
 ## How it works
 
-![How droidlens works: the agent's getclass request goes through find, pick context and cut tiny DEX, then JADX returns Java source; search requests go to the search tools](docs/how-it-works.png)
-
-The diagram's source is [`docs/how-it-works.mmd`](docs/how-it-works.mmd).
+![How droidlens works: getclass goes through find class, pick context and cut tiny DEX to a JADX process that stays running, which returns Java source. Search reads the bytecode directly; findrefs also sends its top 5 matching classes through JADX and returns their matching Java lines.](docs/how-it-works.svg)
 
 A normal decompiler loads and analyses the whole app before it can show you one class. That takes seconds and gigabytes. droidlens does the opposite:
 
@@ -65,6 +63,8 @@ A normal decompiler loads and analyses the whole app before it can show you one 
 2. **Pick context.** It picks only the classes JADX needs to get that class right: its inner classes, its parent classes and interfaces, and the classes that own R8 or Kotlin names it uses. Without them you would lose `@Override`, inner classes and readable names.
 3. **Extract.** It cuts each of those classes out into a tiny DEX file. This uses [rust_ASC](https://github.com/MG1937/rust_ASC), patched to be about 10 times faster.
 4. **Decompile.** It hands the tiny files to a JADX process that stays running. JADX is patched to load its model of the Android framework once, not on every request, which saves about 30 ms per class.
+
+Search takes the lower path. `findrefs` and the list tools read the APK's bytecode directly. `findrefs` also sends its top 5 matching classes through steps 3 and 4 and returns their matching Java lines, like `grep`, so an agent often needs only one call.
 
 ## Quick start
 

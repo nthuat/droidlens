@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="420" viewBox="0 0 1300 420" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#1f2328">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #8c959f; stroke-width: 1.5; }
+      .step { fill: #ddf4ff; stroke: #54aeff; stroke-width: 1.5; }
+      .jadx { fill: #fff8c5; stroke: #d4a72c; stroke-width: 1.5; }
+      .out { fill: #dafbe1; stroke: #4ac26b; stroke-width: 1.5; }
+      .line { fill: none; stroke: #57606a; stroke-width: 1.6; marker-end: url(#arrow); }
+      .dash { fill: none; stroke: #57606a; stroke-width: 1.4; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .title { font-weight: 600; }
+      .small { font-size: 13px; fill: #57606a; }
+      .label { font-size: 13px; fill: #0969da; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="420" rx="12" fill="#ffffff"/>
+
+  <!-- agent -->
+  <rect class="box" x="20" y="170" width="150" height="80" rx="8"/>
+  <text class="title" x="95" y="205" text-anchor="middle">AI agent</text>
+  <text class="small" x="95" y="226" text-anchor="middle">Claude Code, Cursor</text>
+
+  <!-- droidlens container -->
+  <rect x="300" y="30" width="600" height="370" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.5"/>
+  <text class="title" x="320" y="56">droidlens (Rust)</text>
+
+  <!-- getclass lane -->
+  <rect class="step" x="330" y="75" width="160" height="80" rx="8"/>
+  <text class="title" x="410" y="108" text-anchor="middle">1. Find class</text>
+  <text class="small" x="410" y="130" text-anchor="middle">no index, no unpacking</text>
+
+  <rect class="step" x="520" y="75" width="160" height="80" rx="8"/>
+  <text class="title" x="600" y="108" text-anchor="middle">2. Pick context</text>
+  <text class="small" x="600" y="130" text-anchor="middle">inner + parent classes</text>
+
+  <rect class="step" x="710" y="75" width="160" height="80" rx="8"/>
+  <text class="title" x="790" y="108" text-anchor="middle">3. Cut tiny DEX</text>
+  <text class="small" x="790" y="130" text-anchor="middle">patched rust_ASC</text>
+
+  <rect class="jadx" x="940" y="75" width="160" height="80" rx="8"/>
+  <text class="title" x="1020" y="108" text-anchor="middle">4. JADX</text>
+  <text class="small" x="1020" y="130" text-anchor="middle">kept running</text>
+
+  <rect class="out" x="1140" y="75" width="140" height="80" rx="8"/>
+  <text class="title" x="1210" y="108" text-anchor="middle">Java source</text>
+  <text class="small" x="1210" y="130" text-anchor="middle">~10 ms per class</text>
+
+  <!-- search lane -->
+  <rect class="step" x="330" y="290" width="540" height="80" rx="8"/>
+  <text class="title" x="600" y="323" text-anchor="middle">Search the bytecode</text>
+  <text class="small" x="600" y="345" text-anchor="middle">findrefs, listclass, listmethod, liststring, getmanifest</text>
+
+  <rect class="out" x="1140" y="290" width="140" height="80" rx="8"/>
+  <text class="title" x="1210" y="323" text-anchor="middle">Matches +</text>
+  <text class="title" x="1210" y="343" text-anchor="middle">Java lines</text>
+
+  <!-- arrows: getclass lane -->
+  <path class="line" d="M170,190 H210 V115 H328"/>
+  <text class="label" x="255" y="105" text-anchor="middle">getclass</text>
+  <path class="line" d="M490,115 H518"/>
+  <path class="line" d="M680,115 H708"/>
+  <path class="line" d="M870,115 H938"/>
+  <path class="line" d="M1100,115 H1138"/>
+
+  <!-- arrows: search lane -->
+  <path class="line" d="M170,230 H210 V330 H328"/>
+  <text class="label" x="255" y="320" text-anchor="middle">search</text>
+  <path class="line" d="M870,330 H1138"/>
+
+  <!-- findrefs decompiles its top matches through steps 3 and 4 -->
+  <path class="dash" d="M790,288 V157"/>
+  <text class="small" x="778" y="215" text-anchor="end">findrefs: top 5</text>
+  <text class="small" x="778" y="233" text-anchor="end">matching classes</text>
+  <path class="dash" d="M1020,155 V260 H1210 V288"/>
+  <text class="small" x="1030" y="250">their matching lines</text>
+</svg>
