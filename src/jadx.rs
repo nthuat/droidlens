@@ -31,6 +31,8 @@ fn home() -> Result<PathBuf> {
 }
 
 /// Runs `build(tmp)` then renames `tmp` onto `dest`; a second run with `dest` present does nothing.
+/// Processes racing on a cold cache each build their own `tmp`; a loser whose directory rename
+/// fails because the winner's `dest` now exists uses the winner's identical copy.
 fn atomic(dest: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     if dest.exists() {
         return Ok(());
@@ -39,8 +41,9 @@ fn atomic(dest: &Path, build: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     fs::create_dir_all(parent).map_err(|e| Error::Internal(format!("cannot create {}: {e}", parent.display())))?;
     let name = dest.file_name().unwrap().to_string_lossy();
     let tmp = parent.join(format!(".{name}.{}.tmp", std::process::id()));
-    let result = build(&tmp).and_then(|()| {
-        fs::rename(&tmp, dest).map_err(|e| Error::Internal(format!("cannot rename onto {}: {e}", dest.display())))
+    let result = build(&tmp).and_then(|()| match fs::rename(&tmp, dest) {
+        Err(_) if dest.exists() => Ok(()),
+        r => r.map_err(|e| Error::Internal(format!("cannot rename onto {}: {e}", dest.display()))),
     });
     if tmp.is_dir() {
         let _ = fs::remove_dir_all(&tmp);
