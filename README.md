@@ -150,17 +150,17 @@ In short:
 
 ### With an AI agent
 
-The same question about an app, asked to Claude Code (Sonnet) with droidlens's tools or with the JADX command line, in a fresh empty folder each time, 3 runs per app, medians. Both setups answered all 12 questions correctly.
+The same question about an app, asked to Claude Code (Sonnet) with droidlens's tools or with the JADX command line, in a fresh empty folder each time, 3 runs per app, medians. Tool memory is the peak memory of the processes Claude started (droidlens, or the JADX command line) during a session. Both setups answered all 12 questions correctly.
 
 | App (APK size) | Time: droidlens / JADX | Cost: droidlens / JADX | Tool memory: droidlens / JADX |
 | --- | --- | --- | --- |
-| NewPipe (11 MB) | **18 s** / 24 s | $0.107 / **$0.089** | **0.3 GB** / 6.7 GB |
-| Telegram X (48 MB) | **29 s** / 42 s | $0.134 / **$0.108** | **0.5 GB** / 8.1 GB |
-| Bitwarden (191 MB) | **23 s** / 37 s | **$0.116** / $0.117 | **0.3 GB** / 7.9 GB |
-| Element X (420 MB) | **15 s** / 36 s | **$0.084** / $0.092 | **0.6 GB** / 7.7 GB |
-| All 12 questions | **21 s** median / 37 s | $1.37 / **$1.24** total | |
+| NewPipe (11 MB) | **18 s** / 24 s | $0.107 / **$0.089** | **0.3 GB** / 6.5 GB |
+| Telegram X (48 MB) | **29 s** / 42 s | $0.134 / **$0.108** | **0.5 GB** / 7.4 GB |
+| Bitwarden (191 MB) | **23 s** / 37 s | **$0.116** / $0.117 | **0.3 GB** / 7.3 GB |
+| Element X (420 MB) | **15 s** / 36 s | **$0.084** / $0.092 | **0.5 GB** / 6.4 GB |
+| All 12 questions | **21 s** / 37 s | $1.37 / **$1.24** (total) | **0.4 GB** / 6.6 GB |
 
-droidlens answers about 40% faster and uses about 15 to 25 times less memory, and writes no files (JADX wrote 67 to 165 MB of sources per app). It costs about 10% more in tokens overall: on the two smaller apps Claude still takes a few more steps with droidlens than with one decompile plus `grep`. JADX takes up to 70% of RAM by default, and this Mac has 24 GB, so on a smaller machine its memory figure would be lower and its time likely higher.
+droidlens answers about 40% faster and uses about 16 times less memory (median 0.4 GB against 6.6 GB), and writes no files (JADX wrote 67 to 165 MB of sources per app). It costs about 10% more in tokens overall: on the two smaller apps Claude still takes a few more steps with droidlens than with one decompile plus `grep`. JADX takes up to 70% of RAM by default, and this Mac has 24 GB, so on a smaller machine its memory figure would be lower and its time likely higher.
 
 **When to use something else:**
 
