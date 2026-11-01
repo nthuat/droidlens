@@ -1,12 +1,56 @@
 # droidlens
 
-Decompile any class of an Android APK to clean Java in milliseconds. Built for AI agents.
+**Let AI agents read the code of any Android app. Fast, light, and with the same output quality as JADX.**
 
-- **JADX-quality code.** Same output quality as JADX, the standard Android decompiler: 5 of 200 test classes had syntax errors, the same 5 as JADX.
-- **No waiting for the whole app to load.** About 10 ms per class (median) once running. Nothing is unpacked or indexed up front.
-- **Light.** About 500 MB of memory, whatever the APK size. One process serves many APKs at once.
-- **Search included.** Find strings, methods, fields, subclasses and the manifest in 5 to 15 ms.
-- **MCP server.** Works with Claude Code, Cursor and other MCP clients.
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)
+![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)
+![JADX 1.5.6](https://img.shields.io/badge/decompiler-JADX%201.5.6-green.svg)
+
+Ask your AI agent *"how does login work in this app?"* and it searches the APK, decompiles just the classes it needs, and reads them. Each class arrives in about **10 ms**, with **no wait for the app to load** and about **500 MB of memory**, even for a 400 MB APK.
+
+| | droidlens | JADX, whole app loaded |
+| --- | --- | --- |
+| Wait before the first class | **~0.5 s**, once | 1.5 to 3.1 s per app |
+| Time per class (median) | 9 to 13 ms | 3 to 8 ms |
+| Memory | **~500 MB**, for any number of apps | 1.3 to 2.1 GB per app |
+| Files that aren't valid Java (of 200) | 5 | 5 |
+
+<sub>Measured on 200 random classes from NewPipe, Mihon, Bitwarden and Element X. Details below.</sub>
+
+## Built for
+
+- 🔍 **Security reviews with an AI agent.** Find hard-coded keys, the servers an app talks to, weak crypto, or tracking code.
+- 📦 **Many apps at once.** Scan hundreds of APKs, or compare two versions of the same app, from one process.
+- 🐘 **Very large apps.** Memory stays around 500 MB whatever the APK size.
+- ⚙️ **Servers and pipelines.** No up-front load, small memory, and the same output on every run.
+
+## See it in action
+
+You ask Claude Code:
+
+> In ~/Downloads/NewPipe.apk, what does the `Image` class in the extractor hold?
+
+Claude calls droidlens's `getclass` tool and gets readable Java back in milliseconds:
+
+```java
+public final class Image implements Serializable {
+    private final ResolutionLevel estimatedResolutionLevel;
+    private final int height;
+    private final String url;
+    private final int width;
+
+    public Image(String str, int i, int i2, ResolutionLevel resolutionLevel) {
+        this.url = str;
+        this.height = i;
+        this.width = i2;
+        Objects.requireNonNull(resolutionLevel, "estimatedResolutionLevel is null");
+        this.estimatedResolutionLevel = resolutionLevel;
+    }
+    ...
+```
+
+It can also search the app first: where a string is used, which classes extend a type, what the manifest declares. Then it decompiles only what matters.
 
 ## How it works
 
@@ -27,6 +71,7 @@ You need a JDK 17 (`java` and `javac`) and Rust.
 
 ```bash
 # 1. Install
+git clone https://github.com/nthuat/droidlens && cd droidlens
 cargo install --path .
 
 # 2. Add to Claude Code
