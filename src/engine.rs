@@ -110,11 +110,33 @@ impl Engine {
     }
 }
 
+/// Identifies one version of an APK file: an APK rewritten at the same path gets a new stamp,
+/// so its stale session (open file handle, inflated DEX) is dropped.
+#[derive(PartialEq)]
+struct FileStamp {
+    path: PathBuf,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+impl FileStamp {
+    fn of(apk: &Path) -> Result<FileStamp> {
+        let err = |e: std::io::Error| Error::Apk(format!("cannot open APK {}: {e}", apk.display()));
+        let path = std::fs::canonicalize(apk).map_err(err)?;
+        let meta = std::fs::metadata(&path).map_err(err)?;
+        Ok(FileStamp {
+            path,
+            len: meta.len(),
+            modified: meta.modified().ok(),
+        })
+    }
+}
+
 #[derive(Default)]
 struct Worker {
     jadx: JadxWorker,
     /// Least recently used first.
-    sessions: Vec<(PathBuf, ApkSession)>,
+    sessions: Vec<(FileStamp, ApkSession)>,
 }
 
 impl Worker {
@@ -137,11 +159,15 @@ impl Worker {
     }
 
     fn session(&mut self, apk: &Path) -> Result<&mut ApkSession> {
-        let key = std::fs::canonicalize(apk)
-            .map_err(|e| Error::Apk(format!("cannot open APK {}: {e}", apk.display())))?;
-        let entry = match self.sessions.iter().position(|(k, _)| *k == key) {
+        let stamp = FileStamp::of(apk)?;
+        self.sessions
+            .retain(|(s, _)| s.path != stamp.path || *s == stamp);
+        let entry = match self.sessions.iter().position(|(s, _)| *s == stamp) {
             Some(i) => self.sessions.remove(i),
-            None => (key.clone(), ApkSession::open(&key)?),
+            None => {
+                let session = ApkSession::open(&stamp.path)?;
+                (stamp, session)
+            }
         };
         self.sessions.push(entry);
         if self.sessions.len() > MAX_SESSIONS {

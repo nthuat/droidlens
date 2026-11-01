@@ -476,3 +476,100 @@ fn xapk_bundle_decompiles_like_its_base_apk() {
     let from_apk = run(&["getclass", newpipe().to_str().unwrap(), class]);
     assert_eq!(stdout(&from_xapk), stdout(&from_apk));
 }
+
+/// An inner class's in-APK interface is context too: `Resources_ja$JaTimeFormat` implements the
+/// app's `TimeFormat`, and full-APK JADX marks its four methods `@Override`.
+#[test]
+fn inner_class_supertypes_are_context() {
+    if !have(&[newpipe(), jar()]) {
+        return;
+    }
+    let r = run(&[
+        "getclass",
+        newpipe().to_str().unwrap(),
+        "org.ocpsoft.prettytime.i18n.Resources_ja",
+    ]);
+    assert!(r.status.success(), "{}", stderr(&r));
+    let code = stdout(&r);
+    assert_eq!(
+        code.matches("@Override // org.ocpsoft.prettytime.TimeFormat")
+            .count(),
+        4,
+        "{code}"
+    );
+}
+
+/// A JADX request that outlives DROIDLENS_TIMEOUT_SECS fails fast with a clear error instead of
+/// stalling the server, and the server keeps answering.
+#[test]
+fn slow_jadx_request_times_out_and_server_keeps_serving() {
+    if !have(&[apk(), jar()]) {
+        return;
+    }
+    let mut p = serve(&apk(), &[("DROIDLENS_TIMEOUT_SECS", "0.01")]);
+    let started = std::time::Instant::now();
+    let first = p.ask(serve_req(1, SYNC_TASK));
+    let second = p.ask(serve_req(2, SYNC_TASK));
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "took {:?}",
+        started.elapsed()
+    );
+    for (resp, id) in [(&first, 1), (&second, 2)] {
+        assert_eq!(resp["id"], id);
+        let err = resp["error"].as_str().unwrap_or_default();
+        assert!(
+            err.contains("no answer") && err.contains("SyncTask"),
+            "{resp}"
+        );
+    }
+}
+
+/// An APK rewritten at the same path is reopened, not served from the old session.
+#[test]
+fn apk_replaced_at_same_path_is_reopened() {
+    if !have(&[apk(), newpipe(), jar()]) {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("app.apk");
+    std::fs::copy(newpipe(), &path).unwrap();
+    let mut p = serve(&path, &[]);
+    let before = p.ask(serve_req(1, "org.schabi.newpipe.extractor.Image"));
+    assert!(before["code"].is_string(), "{before}");
+    std::fs::copy(apk(), &path).unwrap();
+    let after = p.ask(serve_req(2, SYNC_TASK));
+    assert!(
+        after["code"]
+            .as_str()
+            .is_some_and(|c| c.contains("class SyncTask")),
+        "{after}"
+    );
+}
+
+/// The patched ClspGraph is for JADX 1.5.6 only, so another JADX jar is refused.
+#[test]
+fn other_jadx_version_is_refused() {
+    if !have(&[apk()]) {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let fake = dir.path().join("jadx-1.6.0-all.jar");
+    let mut w = zip::ZipWriter::new(std::fs::File::create(&fake).unwrap());
+    w.start_file(
+        "META-INF/MANIFEST.MF",
+        zip::write::SimpleFileOptions::default(),
+    )
+    .unwrap();
+    w.write_all(b"Manifest-Version: 1.0\njadx-version: 1.6.0\n")
+        .unwrap();
+    w.finish().unwrap();
+    let r = droidlens()
+        .env("DROIDLENS_JADX_JAR", &fake)
+        .env("DROIDLENS_HOME", dir.path().join("home"))
+        .args(["getclass", apk().to_str().unwrap(), SYNC_TASK])
+        .output()
+        .unwrap();
+    assert!(!r.status.success());
+    assert!(stderr(&r).contains("it is JADX 1.6.0"), "{}", stderr(&r));
+}

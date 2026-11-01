@@ -246,17 +246,38 @@ fn find_input(args: &FindRefsArgs) -> Result<FindRefInput> {
 fn needle(kind: RefKind, query: &str) -> Option<String> {
     let q = query.trim();
     let n = match kind {
-        RefKind::String | RefKind::Method | RefKind::Field => q.to_string(),
+        RefKind::String => java_escape(q),
+        RefKind::Method | RefKind::Field => q.to_string(),
         RefKind::Type => q
             .trim_start_matches('L')
             .trim_end_matches(';')
             .rsplit(['/', '.', '$'])
-            .next()
+            .find(|s| !s.is_empty())
             .unwrap_or_default()
             .to_string(),
         RefKind::Extends | RefKind::Impl => return None,
     };
     (!n.is_empty()).then_some(n)
+}
+
+/// `s` as JADX prints it inside a Java string literal, so a raw query that holds quotes,
+/// backslashes or control characters still matches the decompiled line.
+fn java_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// The referencing class of a `findrefs` row such as `classes.dex | Lpkg/Cls;->m | matched=(..)`.
@@ -458,6 +479,40 @@ pub fn run(engine: Engine) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn string_needles_match_jadx_escaped_literals() {
+        assert_eq!(java_escape("a\"b\\c\nd\te"), "a\\\"b\\\\c\\nd\\te");
+        assert_eq!(java_escape("\u{1}"), "\\u0001");
+        assert_eq!(java_escape("ünï"), "ünï");
+        assert_eq!(
+            needle(RefKind::String, "say \"hi\""),
+            Some("say \\\"hi\\\"".into())
+        );
+    }
+
+    #[test]
+    fn type_needle_is_the_last_named_segment() {
+        assert_eq!(
+            needle(RefKind::Type, "Lokhttp3/OkHttpClient;"),
+            Some("OkHttpClient".into())
+        );
+        assert_eq!(needle(RefKind::Type, "Lokhttp3/"), Some("okhttp3".into()));
+        assert_eq!(
+            needle(RefKind::Type, "a.b.Outer$Inner"),
+            Some("Inner".into())
+        );
+        assert_eq!(needle(RefKind::Extends, "a.B"), None);
+    }
+
+    #[test]
+    fn row_class_reads_the_vendored_rust_asc_row_format() {
+        assert_eq!(
+            row_class("classes.dex | Lcom/a/B;->m | matched=(x)"),
+            Some("Lcom/a/B;")
+        );
+        assert_eq!(row_class("classes.dex | Lcom/a/B; extends Lcom/a/C;"), None);
+    }
 
     #[test]
     fn render_reports_truncation_only_when_rows_were_dropped() {

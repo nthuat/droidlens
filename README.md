@@ -138,7 +138,7 @@ Measured on the same 200 random classes from 4 apps: NewPipe, Mihon, Bitwarden, 
 | | droidlens | JADX (whole app loaded) | ASC (Python) | rust_ASC |
 | --- | --- | --- | --- | --- |
 | Files that aren't valid Java | **5** | **5** | 97 | 97 |
-| `@Override` restored (of 379) | 342 | 379 | 0 | 0 |
+| `@Override` emitted | 382 | 379 | 0 | 0 |
 | Time per class (median) | 9 to 13 ms | 3 to 8 ms | 43 to 66 ms | 13 to 50 ms |
 | Wait before the first class | ~0.5 s (Java start) | 1.5 to 3.1 s per app | none | none |
 | Peak memory | 468 to 518 MB | 1.3 to 2.1 GB per app | 54 to 93 MB | 54 to 79 MB |
@@ -178,6 +178,7 @@ droidlens answers about 40% faster and uses about 16 times less memory (median 0
 | `DROIDLENS_HOME` | `~/.cache/droidlens` | Where JADX and the compiled Java worker are stored |
 | `DROIDLENS_JADX_JAR` | (download) | Use an existing `jadx-1.5.6-all.jar` instead of downloading |
 | `DROIDLENS_XMX` | `512m` | Java heap size. If a request runs out of memory, droidlens returns an error and restarts Java for the next request. |
+| `DROIDLENS_TIMEOUT_SECS` | `60` | Longest one decompile may take. A slower request returns an error and Java is restarted, so one pathological class cannot stall the server. |
 
 <details>
 <summary><b>Measurement details</b></summary>

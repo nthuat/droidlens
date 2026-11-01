@@ -136,20 +136,24 @@ impl ApkSession {
     }
 
     /// The classes JADX needs to print `target` as a full-APK run would: the target, its inner
-    /// classes (same DEX), then its in-APK superclasses and interfaces, transitively.
+    /// classes (in any DEX: D8 may split an outer class from its inner classes), then the in-APK
+    /// superclasses and interfaces of all of them, transitively. An anonymous `Foo$1` that
+    /// implements an app interface needs that interface for its `@Override`s.
     pub fn context(&mut self, target: &ClassName) -> Result<Vec<ClassName>> {
-        let i = self
-            .find(target)?
-            .ok_or_else(|| Error::ClassNotFound(target.dotted()))?;
+        if self.find(target)?.is_none() {
+            return Err(Error::ClassNotFound(target.dotted()));
+        }
         let mut out = vec![target.clone()];
-        out.extend(
-            self.descriptors(i)?
-                .iter()
-                .filter(|d| d.is_inner_of(target))
-                .cloned(),
-        );
+        for i in 0..self.entries.len() {
+            out.extend(
+                self.descriptors(i)?
+                    .iter()
+                    .filter(|d| d.is_inner_of(target))
+                    .cloned(),
+            );
+        }
         let mut seen: HashSet<ClassName> = out.iter().cloned().collect();
-        let mut queue = vec![target.clone()];
+        let mut queue = out.clone();
         while let Some(class) = queue.pop() {
             for sup in self.in_apk_supertypes(&class)? {
                 if seen.insert(sup.clone()) {
@@ -165,7 +169,8 @@ impl ApkSession {
         let i = self
             .find(class)?
             .ok_or_else(|| Error::ClassNotFound(class.dotted()))?;
-        let bytes = fix_header(self.manager(i)?.extract_and_rebuild(class.descriptor()));
+        let bytes = fix_header(self.manager(i)?.extract_and_rebuild(class.descriptor()))
+            .ok_or_else(|| Error::Apk(format!("rust_ASC rebuilt no DEX for {}", class.dotted())))?;
         Ok(MiniDex {
             class: class.clone(),
             bytes,
@@ -214,13 +219,17 @@ fn dex_order(name: &str) -> Option<u32> {
     }
 }
 
-/// rust_ASC's rebuilt DEX has a zeroed checksum and signature, which JADX rejects.
-fn fix_header(mut b: Vec<u8>) -> Vec<u8> {
+/// rust_ASC's rebuilt DEX has a zeroed checksum and signature, which JADX rejects. `None` when
+/// the buffer is too short to be a DEX (a DEX header is 112 bytes).
+fn fix_header(mut b: Vec<u8>) -> Option<Vec<u8>> {
+    if b.len() < 112 {
+        return None;
+    }
     let sig = Sha1::digest(&b[32..]);
     b[12..32].copy_from_slice(&sig);
     let sum = adler32(&b[12..]);
     b[8..12].copy_from_slice(&sum.to_le_bytes());
-    b
+    Some(b)
 }
 
 fn adler32(data: &[u8]) -> u32 {
@@ -237,6 +246,8 @@ fn adler32(data: &[u8]) -> u32 {
     (b << 16) | a
 }
 
+/// ASCII on purpose: a valid but non-ASCII identifier is only over-included as an owner, which
+/// costs a little JADX time, while missing a mangled name would leave invalid Java.
 fn is_java_name(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
