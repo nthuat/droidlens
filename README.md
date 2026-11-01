@@ -5,6 +5,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)
 ![MCP](https://img.shields.io/badge/MCP-server-8A2BE2.svg)
+[![CI](https://github.com/nthuat/droidlens/actions/workflows/ci.yml/badge.svg)](https://github.com/nthuat/droidlens/actions/workflows/ci.yml)
 ![JADX 1.5.6](https://img.shields.io/badge/decompiler-JADX%201.5.6-green.svg)
 
 Ask your AI agent *"how does login work in this app?"* and it searches the APK, decompiles just the classes it needs, and reads them. Each class arrives in about **10 ms**, with **no wait for the app to load** and about **500 MB of memory**, even for a 400 MB APK.
@@ -206,10 +207,13 @@ For scale, decompiling all of Telegram X (48 MB) to disk with the JADX CLI took 
 <summary><b>Running the tests</b></summary>
 
 ```bash
-cargo test
+scripts/fetch-fixtures.sh   # downloads the test APKs and JADX into .fixtures/ (about 140 MB, checksum verified)
+cargo test --release
 ```
 
-The integration tests in `tests/cli.rs` run the real binary. They need the Telegram X APK (`DROIDLENS_TEST_APK`), the NewPipe APK (`DROIDLENS_TEST_APK2`) and a JADX jar (`DROIDLENS_JADX_JAR`). Each test skips itself if a file is missing.
+The integration tests in `tests/cli.rs` run the real binary on Telegram X 0.29.1 and NewPipe 0.29.1. A test skips itself if its files are missing, unless `DROIDLENS_REQUIRE_FIXTURES=1` is set, as it is in CI.
+
+CI (`.github/workflows/ci.yml`) checks formatting and lints, then runs every test on Linux and macOS. Pushing a `v*` tag that matches the `Cargo.toml` version builds release binaries for Linux x86_64, Linux arm64 and macOS arm64 and attaches them to a GitHub release (`.github/workflows/release.yml`).
 
 </details>
 
