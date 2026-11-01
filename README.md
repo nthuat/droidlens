@@ -23,7 +23,7 @@ Same 200 classes: 50 random top-level classes (fixed seed) from each of NewPipe 
 
 In short: droidlens gives JADX's code quality with no per-APK load and about a quarter to a third of JADX's memory, and serves any number of APKs from one JVM. A JADX process kept open on one APK is faster per class after its load. ASC and rust_ASC are the lightest, but their decompiler (a DAD design) leaves about half of the classes as invalid Java.
 
-Not measured here: decompiling the whole APK to disk with the JADX CLI took 17 s and 8 GB peak on Telegram X 0.29.1 (48 MB). REA, Androguard, apktool and JEB were not run.
+For scale, decompiling a whole APK to disk with the JADX CLI took 17 s and 8 GB peak on Telegram X 0.29.1 (48 MB). REA, Androguard, apktool and JEB were not measured.
 
 ## Install
 
