@@ -22,8 +22,13 @@ use serde_json::Value;
 use crate::class_name::ClassName;
 use crate::engine::Engine;
 use crate::error::{Error, Result};
+use crate::java_text::snippets;
 
 const DEFAULT_LIMIT: usize = 500;
+/// `findrefs` decompiles at most this many referencing classes to show their matching lines.
+const CODE_CLASSES: usize = 5;
+const CODE_CONTEXT_LINES: usize = 3;
+const CODE_MAX_LINES_PER_CLASS: usize = 40;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -118,6 +123,9 @@ struct FindRefsArgs {
     fuzzy_class: Option<bool>,
     /// Maximum number of rows returned. Default 500.
     limit: Option<usize>,
+    /// Also decompile the first few referencing classes and show the matching Java lines with
+    /// surrounding context, like `grep -n -C3`. Default true. Not used for `extends` and `impl`.
+    code: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -143,14 +151,18 @@ fn tools() -> Vec<Tool> {
     vec![
         tool::<GetClassArgs>(
             "getclass",
-            "Decompile one class of an APK to JADX-quality Java in tens of milliseconds.",
+            "Decompile one class of an APK to JADX-quality Java in tens of milliseconds. Use it when the \
+             matching lines from `findrefs` are not enough.",
         ),
         tool::<ListClassArgs>("listclass", "List class descriptors defined in an APK."),
         tool::<ListMethodArgs>("listmethod", "List method signatures defined in an APK."),
         tool::<ListStringArgs>("liststring", "List string pool values of an APK."),
         tool::<FindRefsArgs>(
             "findrefs",
-            "Find methods that reference a string, type, method or field, or classes that extend or implement a class.",
+            "Search an APK's code, like grep over the decompiled app. Finds the methods that reference a \
+             string, type, method or field, or the classes that extend or implement a class. For references \
+             it also shows the matching Java lines with 3 lines of context from the first 5 classes, so one \
+             call usually answers where and how a value is used. Start here.",
         ),
         tool::<GetManifestArgs>(
             "getmanifest",
@@ -229,6 +241,63 @@ fn find_input(args: &FindRefsArgs) -> Result<FindRefInput> {
     Ok(input)
 }
 
+/// The text a referencing class's Java contains where it uses the `findrefs` target.
+fn needle(kind: RefKind, query: &str) -> Option<String> {
+    let q = query.trim();
+    let n = match kind {
+        RefKind::String | RefKind::Method | RefKind::Field => q.to_string(),
+        RefKind::Type => q
+            .trim_start_matches('L')
+            .trim_end_matches(';')
+            .rsplit(['/', '.', '$'])
+            .next()
+            .unwrap_or_default()
+            .to_string(),
+        RefKind::Extends | RefKind::Impl => return None,
+    };
+    (!n.is_empty()).then_some(n)
+}
+
+/// The referencing class of a `findrefs` row such as `classes.dex | Lpkg/Cls;->m | matched=(..)`.
+fn row_class(row: &str) -> Option<&str> {
+    let rest = row.split_once(" | ")?.1;
+    let end = rest.find(";->")? + 1;
+    Some(&rest[..end])
+}
+
+/// Matching Java lines from the first `CODE_CLASSES` distinct classes in `rows`.
+fn code_blocks(engine: &Engine, apk: &Path, rows: &[String], needle: &str) -> String {
+    let mut classes: Vec<&str> = Vec::new();
+    for c in rows.iter().filter_map(|r| row_class(r)) {
+        if !classes.contains(&c) {
+            classes.push(c);
+        }
+        if classes.len() == CODE_CLASSES {
+            break;
+        }
+    }
+    let mut out = String::new();
+    for desc in classes {
+        let Ok(class) = ClassName::parse(desc) else {
+            continue;
+        };
+        let body = match engine.getclass(apk, &class, true) {
+            Ok(d) => snippets(
+                &d.code,
+                needle,
+                CODE_CONTEXT_LINES,
+                CODE_MAX_LINES_PER_CLASS,
+            )
+            .unwrap_or_else(|| {
+                format!("(\"{needle}\" not found verbatim in the decompiled Java; call getclass)")
+            }),
+            Err(e) => format!("(could not decompile: {e})"),
+        };
+        out.push_str(&format!("\n\n=== {} ===\n{body}", class.dotted()));
+    }
+    out
+}
+
 fn call(engine: &Engine, name: &str, args: Value) -> Result<String> {
     let bad = |e: serde_json::Error| Error::BadRequest(format!("invalid arguments: {e}"));
     match name {
@@ -267,12 +336,22 @@ fn call(engine: &Engine, name: &str, args: Value) -> Result<String> {
         "findrefs" => {
             let a: FindRefsArgs = serde_json::from_value(args).map_err(bad)?;
             let input = find_input(&a)?;
-            let rows = handler(&a.apk)
+            let rows: Vec<String> = handler(&a.apk)
                 .for_each_findrefs(a.kind.name(), &input)
                 .into_iter()
                 .flat_map(|(_dex, lines)| lines)
                 .collect();
-            Ok(render(rows, a.limit))
+            let limit = a.limit.unwrap_or(DEFAULT_LIMIT).max(1);
+            let code = match (a.code.unwrap_or(true), needle(a.kind, &a.query)) {
+                (true, Some(needle)) => code_blocks(
+                    engine,
+                    Path::new(&a.apk),
+                    &rows[..rows.len().min(limit)],
+                    &needle,
+                ),
+                _ => String::new(),
+            };
+            Ok(render(rows, a.limit) + &code)
         }
         "getmanifest" => {
             let a: GetManifestArgs = serde_json::from_value(args).map_err(bad)?;
@@ -293,9 +372,10 @@ impl ServerHandler for Server {
             .with_server_info(Implementation::new("droidlens", env!("CARGO_PKG_VERSION")))
             .with_instructions(
                 "Decompile and search local Android APKs. Every tool takes an `apk` path on the \
-                 server filesystem. `getclass` returns JADX-quality Java for one class; the APK and \
-                 the JADX JVM stay warm between calls. List and search tools cap their output at \
-                 `limit` rows (default 500) and say when they truncated.",
+                 server filesystem. Start with `findrefs`: it finds where a string, type, method or \
+                 field is used and shows the matching decompiled Java lines, like grep. Use \
+                 `getclass` for a whole class when those lines are not enough. List and search \
+                 tools cap their output at `limit` rows (default 500) and say when they truncated.",
             )
     }
 

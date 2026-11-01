@@ -3,6 +3,7 @@ mod class_name;
 mod engine;
 mod error;
 mod jadx;
+mod java_text;
 mod mcp;
 mod serve;
 

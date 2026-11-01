@@ -92,7 +92,7 @@ Every tool takes the path of an APK. One server can work on many APKs. It keeps 
 | Tool | What it does |
 | --- | --- |
 | `getclass` | Decompiles a class to Java. `class` can be `pkg.Cls`, `pkg.Outer$Inner` or `Lpkg/Cls;`. |
-| `findrefs` | Finds where a `string`, `type`, `method` or `field` is used, or which classes `extends` / `impl` a type. |
+| `findrefs` | Finds where a `string`, `type`, `method` or `field` is used, and shows the matching decompiled Java lines with 3 lines of context, like `grep -n -C3` (first 5 classes; `code: false` turns this off). Also finds which classes `extends` / `impl` a type. |
 | `listclass` | Lists classes, optionally under a package `prefix`. |
 | `listmethod` | Lists methods, optionally of one `class` or matching a `filter`. |
 | `liststring` | Lists strings in the app, optionally matching a `filter`. |
@@ -147,6 +147,20 @@ In short:
 - **droidlens** gives JADX-quality code without loading the whole app, with a quarter to a third of JADX's memory.
 - **JADX** kept open on a single app is faster per class once its load is done.
 - **ASC and rust_ASC** are the lightest, but about half of their output isn't valid Java.
+
+### With an AI agent
+
+The same question about an app, asked to Claude Code (Sonnet) with droidlens's tools or with the JADX command line, in a fresh empty folder each time, 3 runs per app, medians. Both setups answered all 12 questions correctly.
+
+| App (APK size) | Time: droidlens / JADX | Cost: droidlens / JADX | Tool memory: droidlens / JADX |
+| --- | --- | --- | --- |
+| NewPipe (11 MB) | **18 s** / 24 s | $0.107 / **$0.089** | **0.3 GB** / 6.7 GB |
+| Telegram X (48 MB) | **29 s** / 42 s | $0.134 / **$0.108** | **0.5 GB** / 8.1 GB |
+| Bitwarden (191 MB) | **23 s** / 37 s | **$0.116** / $0.117 | **0.3 GB** / 7.9 GB |
+| Element X (420 MB) | **15 s** / 36 s | **$0.084** / $0.092 | **0.6 GB** / 7.7 GB |
+| All 12 questions | **21 s** median / 37 s | $1.37 / **$1.24** total | |
+
+droidlens answers about 40% faster and uses about 15 to 25 times less memory, and writes no files (JADX wrote 67 to 165 MB of sources per app). It costs about 10% more in tokens overall: on the two smaller apps Claude still takes a few more steps with droidlens than with one decompile plus `grep`. JADX takes up to 70% of RAM by default, and this Mac has 24 GB, so on a smaller machine its memory figure would be lower and its time likely higher.
 
 **When to use something else:**
 

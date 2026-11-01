@@ -11,6 +11,7 @@ use crate::apk::ApkSession;
 use crate::class_name::ClassName;
 use crate::error::{Error, Result};
 use crate::jadx::JadxWorker;
+use crate::java_text::strip_noise;
 
 const MAX_SESSIONS: usize = 8;
 
@@ -169,7 +170,7 @@ impl Worker {
             vec![session.extract(class)?]
         };
         timing.extract = watch.lap();
-        let code = self.jadx.decompile(class, &inputs)?;
+        let code = strip_noise(&self.jadx.decompile(class, &inputs)?);
         timing.jadx = watch.lap();
         Ok(Decompiled { code, timing })
     }
